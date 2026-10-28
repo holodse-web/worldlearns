@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "mobslearn",
+  "version": "1.0.0-beta+1.20.1",
+  "name": "World Learns",
+  "description": "The world learns from how you play: mobs pick up your habits, villages and monster camps grow, make friends, go to war and talk. by RRM Network",
+  "authors": [
+    "RRM Network"
+  ],
+  "license": "All-Rights-Reserved",
+  "icon": "assets/mobslearn/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.rrm.mobslearn.MobsLearn"
+    ],
+    "client": [
+      "com.rrm.mobslearn.client.MobsLearnClient"
+    ]
+  },
+  "mixins": [
+    "mobslearn.mixins.json",
+    {
+      "config": "mobslearn.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.14.21",
+    "minecraft": "~1.20.1",
+    "java": ">=17",
+    "fabric-api": ">=0.87.0"
+  }
+}

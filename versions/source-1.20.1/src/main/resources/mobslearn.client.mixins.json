@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.rrm.mobslearn.client.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "CreateWorldGameTabMixin",
+    "LanguageManagerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,1611 @@
+diff -ruN a/src/main/java/com/rrm/mobslearn/MobsLearn.java b/src/main/java/com/rrm/mobslearn/MobsLearn.java
+--- a/src/main/java/com/rrm/mobslearn/MobsLearn.java	2026-10-28 19:44:35.795275228 +0000
++++ b/src/main/java/com/rrm/mobslearn/MobsLearn.java	2026-10-28 19:44:36.093483775 +0000
+@@ -48,7 +48,7 @@
+             com.rrm.mobslearn.learn.Milestones.checkWorld(handler.player);
+         });
+ 
+-        net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents.CHUNK_LOAD.register((level, chunk, generated) -> com.rrm.mobslearn.mob.Colonies.chunkLoaded(level, chunk, generated));
++        net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents.CHUNK_LOAD.register((level, chunk) -> com.rrm.mobslearn.mob.Colonies.chunkLoaded(level, chunk, chunk.getInhabitedTime() == 0));
+         ServerTickEvents.END_SERVER_TICK.register(server -> {
+             WorldBrain.serverTick();
+             if (WorldBrain.get().enabled) Behaviors.serverTick(server);
+@@ -65,10 +65,9 @@
+         ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
+             if (!WorldBrain.get().enabled) return true;
+             Learning.onDamage(entity, source);
+-            return Behaviors.allowDamage(entity, source, amount);
+-        });
+-        ServerLivingEntityEvents.AFTER_DAMAGE.register((entity, source, base, taken, blocked) -> {
+-            if (WorldBrain.get().enabled) Behaviors.afterDamage(entity, source, base, taken, blocked);
++            boolean ok = Behaviors.allowDamage(entity, source, amount);
++            if (ok) Behaviors.afterDamage(entity, source, amount, amount, false);
++            return ok;
+         });
+         ServerLivingEntityEvents.ALLOW_DEATH.register((entity, source, amount) -> !WorldBrain.get().enabled || com.rrm.mobslearn.mob.Critters.allowDeath(entity, source));
+         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
+diff -ruN a/src/main/java/com/rrm/mobslearn/MobsLearnRules.java b/src/main/java/com/rrm/mobslearn/MobsLearnRules.java
+--- a/src/main/java/com/rrm/mobslearn/MobsLearnRules.java	2026-10-28 19:44:35.106597366 +0000
++++ b/src/main/java/com/rrm/mobslearn/MobsLearnRules.java	2026-10-28 19:44:36.091411728 +0000
+@@ -1,12 +1,25 @@
+ package com.rrm.mobslearn;
+ 
+-import net.fabricmc.fabric.api.gamerule.v1.GameRuleBuilder;
+-import net.minecraft.world.level.gamerules.GameRule;
+-import net.minecraft.world.level.gamerules.GameRuleCategory;
++import net.fabricmc.fabric.api.gamerule.v1.GameRuleFactory;
++import net.fabricmc.fabric.api.gamerule.v1.GameRuleRegistry;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.world.level.GameRules;
+ 
+ public final class MobsLearnRules {
+-    public static final GameRule<Boolean> ENABLED = GameRuleBuilder.forBoolean(true)
+-        .category(GameRuleCategory.MOBS).buildAndRegister(MobsLearn.id("enabled"));
+-    private MobsLearnRules() {}
+-    public static void register() {}
+-}
++    public static final GameRules.Key<GameRules.BooleanValue> ENABLED =
++        GameRuleRegistry.register("mobslearn:enabled", GameRules.Category.MOBS, GameRuleFactory.createBooleanRule(true));
++
++    private MobsLearnRules() {
++    }
++
++    public static void register() {
++    }
++
++    public static boolean get(GameRules rules) {
++        return rules.getBoolean(ENABLED);
++    }
++
++    public static void set(GameRules rules, boolean value, MinecraftServer server) {
++        rules.getRule(ENABLED).set(value, server);
++    }
++}
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/AskScreen.java b/src/main/java/com/rrm/mobslearn/client/AskScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/AskScreen.java	2026-10-28 19:44:35.821022033 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/AskScreen.java	2026-10-28 19:44:36.089864288 +0000
+@@ -121,14 +121,14 @@
+         if (com.rrm.mobslearn.client.CNet.canSend(Net.AnswerPayload.TYPE)) com.rrm.mobslearn.client.CNet.send(new Net.AnswerPayload(villager, i));
+     }
+ 
+-    @Override
+-    public void renderBackground(GuiGraphics g, int mx, int my, float a) {
++    public void mlBackground(GuiGraphics g, int mx, int my, float a) {
+         float p = Anim.ease((Util.getMillis() - openedAt) / 250f);
+         g.fill(0, 0, width, height, Anim.fade(0xB0000000, p));
+     }
+ 
+     @Override
+     public void render(GuiGraphics g, int mx, int my, float a) {
++        mlBackground(g, mx, my, a);
+         long now = Util.getMillis();
+         dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
+         lastFrame = now;
+@@ -151,11 +151,11 @@
+             g.renderItem(new ItemStack(Items.VILLAGER_SPAWN_EGG), 0, 0);
+             g.pose().popPose();
+         }
+-        g.drawString(font, Component.translatable("mobslearn.ask.kicker"), x + 48, y + 13, Anim.fade(Ui.GOLD, p), false);
++        com.rrm.mobslearn.client.Ui.text(g, font, Component.translatable("mobslearn.ask.kicker"), x + 48, y + 13, Anim.fade(Ui.GOLD, p), false);
+         Ui.scaledText(g, font, Component.translatable("mobslearn.ask.question." + topic), x + 48, y + 25, 1.3f, Anim.fade(0xFFFFFFFF, p), false, false);
+         int ty = y + 48;
+         for (FormattedCharSequence line : font.split(Component.translatable("mobslearn.ask.hint"), pw - 24)) {
+-            g.drawString(font, line, x + 12, ty, Anim.fade(Ui.MUTED, p), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, line, x + 12, ty, Anim.fade(Ui.MUTED, p), false);
+             ty += 10;
+         }
+ 
+@@ -179,8 +179,8 @@
+             Ui.border(g, cx, cy, cw, chh, Anim.fade(Anim.lerp(0x30FFFFFF, edge, sel), local));
+             if (chosen >= 0 && chosen != i) g.fill(cx + 1, cy + 1, cx + cw - 1, cy + chh - 1, Anim.fade(0x90000000, local));
+             Component label = Component.translatable("mobslearn.ask.option", (char) ('A' + i));
+-            g.drawString(font, label, cx + 8, cy + 7, Anim.fade(Ui.CREAM, local), false);
+-            g.drawString(font, Component.literal(String.valueOf(i + 1)), cx + cw - 12, cy + 7, Anim.fade(0x60FFFFFF, local), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, label, cx + 8, cy + 7, Anim.fade(Ui.CREAM, local), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, Component.literal(String.valueOf(i + 1)), cx + cw - 12, cy + 7, Anim.fade(0x60FFFFFF, local), false);
+             int gx = cx + 8, gy = cy + 22;
+             List<ItemStack> grid = grids.get(i);
+             for (int s = 0; s < 9; s++) {
+@@ -191,7 +191,7 @@
+             }
+             int rx = gx + SLOT * 3 + 6;
+             if (cw - (rx - cx) >= 34) {
+-                g.drawString(font, Component.literal("→"), rx, gy + SLOT + 4, Anim.fade(Ui.MUTED, local), false);
++                com.rrm.mobslearn.client.Ui.text(g, font, Component.literal("→"), rx, gy + SLOT + 4, Anim.fade(Ui.MUTED, local), false);
+                 g.fill(rx + 12, gy + SLOT - 2, rx + 34, gy + SLOT * 2 + 2, Anim.fade(0x50000000, local));
+                 if (local > 0.5f) g.renderItem(result, rx + 15, gy + SLOT + 1);
+             }
+@@ -200,7 +200,7 @@
+                 int vw = font.width(verdict) + 10;
+                 int vx = cx + (cw - vw) / 2, vy = cy + chh - 14;
+                 g.fill(vx, vy, vx + vw, vy + 12, correct ? 0xE02E6B16 : 0xE07A2420);
+-                g.drawString(font, verdict, vx + 5, vy + 2, 0xFFFFFFFF, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, verdict, vx + 5, vy + 2, 0xFFFFFFFF, false);
+             }
+         }
+         if (correct != null) {
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/BannerHud.java b/src/main/java/com/rrm/mobslearn/client/BannerHud.java
+--- a/src/main/java/com/rrm/mobslearn/client/BannerHud.java	2026-10-28 19:44:36.003816372 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/BannerHud.java	2026-10-28 19:44:36.090528716 +0000
+@@ -79,7 +79,7 @@
+             current = null;
+             return;
+         }
+-        if (mc.gui.hud.isHidden()) return;
++        if (mc.options.hideGui) return;
+         float slide = age < IN ? ease(age / (float) IN) : 1f;
+         float alpha = age > IN + SHOW ? 1f - (age - IN - SHOW) / (float) OUT : Math.min(1f, age / (float) IN * 1.5f);
+         alpha = Mth.clamp(alpha, 0f, 1f);
+@@ -115,14 +115,14 @@
+         g.pose().popPose();
+ 
+         int tx = x + 50;
+-        g.drawString(font, title, tx, y + 7, (a << 24) | (color & 0xFFFFFF), false);
+-        g.drawString(font, name, tx, y + 19, (a << 24) | 0xFFFFFF, false);
++        com.rrm.mobslearn.client.Ui.text(g, font, title, tx, y + 7, (a << 24) | (color & 0xFFFFFF), false);
++        com.rrm.mobslearn.client.Ui.text(g, font, name, tx, y + 19, (a << 24) | 0xFFFFFF, false);
+         String pips = "●".repeat(current.level) + "○".repeat(Skill.MAX_LEVEL - current.level);
+-        g.drawString(font, pips, x + w - 10 - font.width(pips), y + 19, (a << 24) | 0xFFD25A, false);
++        com.rrm.mobslearn.client.Ui.text(g, font, pips, x + w - 10 - font.width(pips), y + 19, (a << 24) | 0xFFD25A, false);
+ 
+         int intel = ClientKnowledge.get().intelligence();
+         String label = Component.translatable("mobslearn.banner.intel", intel).getString();
+-        g.drawString(font, label, tx, y + 32, (Math.round(alpha * 0xA0) << 24) | 0xF6E7C1, false);
++        com.rrm.mobslearn.client.Ui.text(g, font, label, tx, y + 32, (Math.round(alpha * 0xA0) << 24) | 0xF6E7C1, false);
+         int bx = tx + font.width(label) + 6, bw = x + w - 10 - bx;
+         if (bw > 10) {
+             g.fill(bx, y + 34, bx + bw, y + 37, (Math.round(alpha * 0x50) << 24));
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/CNet.java b/src/main/java/com/rrm/mobslearn/client/CNet.java
+--- a/src/main/java/com/rrm/mobslearn/client/CNet.java	1970-01-01 00:00:00.000000000 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/CNet.java	2026-10-28 19:44:36.089978806 +0000
+@@ -0,0 +1,33 @@
++package com.rrm.mobslearn.client;
++
++import com.rrm.mobslearn.net.Net;
++import java.util.function.BiConsumer;
++import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
++import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
++import net.minecraft.client.Minecraft;
++import net.minecraft.network.FriendlyByteBuf;
++
++public final class CNet {
++    private CNet() {
++    }
++
++    public record Context(Minecraft client) {
++    }
++
++    public static boolean canSend(Net.PType<?> type) {
++        return ClientPlayNetworking.canSend(type.id());
++    }
++
++    public static void send(Net.Payload payload) {
++        FriendlyByteBuf buf = PacketByteBufs.create();
++        payload.write(buf);
++        ClientPlayNetworking.send(payload.ptype().id(), buf);
++    }
++
++    public static <T extends Net.Payload> void registerGlobalReceiver(Net.PType<T> type, BiConsumer<T, Context> handler) {
++        ClientPlayNetworking.registerGlobalReceiver(type.id(), (client, net, buf, sender) -> {
++            T value = type.reader().apply(buf);
++            client.execute(() -> handler.accept(value, new Context(client)));
++        });
++    }
++}
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java b/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java	2026-10-28 19:44:35.822696867 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java	2026-10-28 19:44:36.091201189 +0000
+@@ -96,8 +96,7 @@
+         return false;
+     }
+ 
+-    @Override
+-    public void renderBackground(GuiGraphics g, int mx, int my, float a) {
++    public void mlBackground(GuiGraphics g, int mx, int my, float a) {
+         g.fill(0, 0, width, height, Anim.fade(0xB0000000, Anim.ease((Util.getMillis() - openedAt) / 250f)));
+     }
+ 
+@@ -105,11 +104,12 @@
+         if (s.isEmpty()) return;
+         g.renderItem(s, x, y);
+         String c = String.valueOf(s.getCount());
+-        if (s.getCount() > 1) g.drawString(font, c, x + 17 - font.width(c), y + 9, enough ? 0xFFFFFFFF : Ui.RED, true);
++        if (s.getCount() > 1) com.rrm.mobslearn.client.Ui.text(g, font, c, x + 17 - font.width(c), y + 9, enough ? 0xFFFFFFFF : Ui.RED, true);
+     }
+ 
+     @Override
+     public void render(GuiGraphics g, int mx, int my, float a) {
++        mlBackground(g, mx, my, a);
+         long now = Util.getMillis();
+         dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
+         lastFrame = now;
+@@ -125,7 +125,7 @@
+             g.pose().popPose();
+         }
+         Ui.scaledText(g, font, title, px + 46, y0 + 10, 1.3f, Anim.fade(0xFFFFFFFF, p), false, false);
+-        for (int li = 0; li < sub.size(); li++) g.drawString(font, sub.get(li), px + 46, y0 + 25 + li * 10, Anim.fade(Ui.MUTED, p), false);
++        for (int li = 0; li < sub.size(); li++) com.rrm.mobslearn.client.Ui.text(g, font, sub.get(li), px + 46, y0 + 25 + li * 10, Anim.fade(Ui.MUTED, p), false);
+ 
+         int top = y0 + 44 + extra;
+         for (int i = 0; i < offers.size(); i++) {
+@@ -146,17 +146,17 @@
+             int ix = px + 18, iy = ry + 7;
+             stackAt(g, o.a, ix, iy, count(o.a) >= o.a.getCount());
+             if (!o.b.isEmpty()) {
+-                g.drawString(font, "+", ix + 21, iy + 4, Ui.MUTED, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, "+", ix + 21, iy + 4, Ui.MUTED, false);
+                 stackAt(g, o.b, ix + 30, iy, count(o.b) >= o.b.getCount());
+             }
+-            g.drawString(font, "→", ix + 58, iy + 4, ok ? Ui.GREEN : Ui.MUTED, false);
++            com.rrm.mobslearn.client.Ui.text(g, font, "→", ix + 58, iy + 4, ok ? Ui.GREEN : Ui.MUTED, false);
+             stackAt(g, o.result, ix + 74, iy, true);
+             Component name = o.result.getHoverName();
+             String n = font.plainSubstrByWidth(name.getString(), pw - 130);
+-            g.drawString(font, n, ix + 98, iy + 1, o.locked ? 0xFF7A7466 : 0xFFFFFFFF, false);
++            com.rrm.mobslearn.client.Ui.text(g, font, n, ix + 98, iy + 1, o.locked ? 0xFF7A7466 : 0xFFFFFFFF, false);
+             Component sub = o.locked ? Component.translatable("mobslearn.trade.locked", o.tier)
+                 : ok ? Component.translatable("mobslearn.trade.click") : Component.translatable("mobslearn.trade.need");
+-            g.drawString(font, sub, ix + 98, iy + 11, o.locked ? 0xFF6E6A5C : ok ? Ui.GREEN : Ui.RED, false);
++            com.rrm.mobslearn.client.Ui.text(g, font, sub, ix + 98, iy + 11, o.locked ? 0xFF6E6A5C : ok ? Ui.GREEN : Ui.RED, false);
+             if (o.locked) g.fill(px + 11, ry + 1, px + pw - 11, ry + ROW - 1, 0x70000000);
+         }
+         super.render(g, mx, my, a);
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java b/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java
+--- a/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java	2026-10-28 19:44:35.537591713 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java	2026-10-28 19:44:36.090875846 +0000
+@@ -121,12 +121,12 @@
+         }
+         int ty = cy + (c.icon != null && title.size() == 1 && badgeW == 0 ? 4 : 0);
+         for (FormattedCharSequence s : title) {
+-            g.drawString(font, s, tx, ty, fade(0xFFFFFFFF, p), true);
++            com.rrm.mobslearn.client.Ui.text(g, font, s, tx, ty, fade(0xFFFFFFFF, p), true);
+             ty += 10;
+         }
+         if (badgeW > 0) {
+             g.fill(tx, ty, tx + badgeW, ty + 11, fade(0x38000000 | (c.badgeColor & 0xFFFFFF), p));
+-            g.drawString(font, c.badge, tx + 4, ty + 2, fade(c.badgeColor, p), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, c.badge, tx + 4, ty + 2, fade(c.badgeColor, p), false);
+         }
+         cy += headH;
+         for (int i = 0; i < body.size(); i++) {
+@@ -136,7 +136,7 @@
+                 cy += 2;
+             }
+             for (FormattedCharSequence s : body.get(i)) {
+-                g.drawString(font, s, dx + pad, cy, fade(c.lines.get(i).color, p), false);
++                com.rrm.mobslearn.client.Ui.text(g, font, s, dx + pad, cy, fade(c.lines.get(i).color, p), false);
+                 cy += 10;
+             }
+         }
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main/java/com/rrm/mobslearn/client/JournalScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java	2026-10-28 19:44:35.817856885 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/JournalScreen.java	2026-10-28 19:44:36.090080753 +0000
+@@ -80,8 +80,7 @@
+         return true;
+     }
+ 
+-    @Override
+-    public void renderBackground(GuiGraphics g, int mx, int my, float partial) {
++    public void mlBackground(GuiGraphics g, int mx, int my, float partial) {
+         g.fillGradient(0, 0, width, height, 0xF00E150D, 0xFA080C08);
+     }
+ 
+@@ -105,6 +104,7 @@
+ 
+     @Override
+     public void render(GuiGraphics g, int mx, int my, float partial) {
++        mlBackground(g, mx, my, partial);
+         long now = Util.getMillis();
+         dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
+         lastFrame = now;
+@@ -155,11 +155,11 @@
+         }
+         soon.sort((a, b) -> Double.compare(progress(k, b), progress(k, a)));
+         if (soon.size() > 4) soon = soon.subList(0, 4);
+-        g.drawString(font, Component.translatable("mobslearn.journal.soon"), ix, y, Ui.GOLD, false);
++        com.rrm.mobslearn.client.Ui.text(g, font, Component.translatable("mobslearn.journal.soon"), ix, y, Ui.GOLD, false);
+         y += 13;
+         if (soon.isEmpty()) {
+             for (FormattedCharSequence line : font.split(Component.translatable("mobslearn.journal.soon.empty"), iw)) {
+-                g.drawString(font, line, ix, y, FAINT, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, line, ix, y, FAINT, false);
+                 y += 11;
+             }
+             y += 4;
+@@ -174,14 +174,14 @@
+                 icon(g, s.iconId(), cx + 7, cy + 5, 24);
+                 int lvl = k.level(s);
+                 String name = font.plainSubstrByWidth(s.displayName().getString(), sw - 80);
+-                g.drawString(font, name, cx + 37, cy + 6, 0xFFFFFFFF, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, name, cx + 37, cy + 6, 0xFFFFFFFF, false);
+                 String next = "→ " + roman(lvl + 1);
+-                g.drawString(font, next, cx + sw - 8 - font.width(next), cy + 6, Ui.GOLD, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, next, cx + sw - 8 - font.width(next), cy + 6, Ui.GOLD, false);
+                 float f = (float) progress(k, s);
+                 int bx = cx + 37, bw = sw - 45;
+                 g.fill(bx, cy + 21, bx + bw, cy + 24, 0x30FFFFFF);
+                 Ui.fill(g, bx, cy + 21, bw * f * intro, 3, s.group().color);
+-                g.drawString(font, Math.round(f * 100) + "%", bx, cy + 26 - 1, FAINT, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, Math.round(f * 100) + "%", bx, cy + 26 - 1, FAINT, false);
+             }
+             y += ((soon.size() + scols - 1) / scols) * (sh + gap) + 6;
+         }
+@@ -211,7 +211,7 @@
+                 g.fill(cx, y, cx + lw, y + 15, Ui.mix(0x18FFFFFF, (0x50 << 24) | (col & 0xFFFFFF), hv));
+                 Ui.border(g, cx, y, lw, 15, sel ? col : Ui.mix(0x22FFFFFF, col, hv));
+                 if (grp != null) icon(g, grp.iconId, cx + 4, y + 1, 13);
+-                g.drawString(font, label, cx + (grp == null ? 6 : 20), y + 4, sel ? 0xFFFFFFFF : Ui.mix(DIM, 0xFFFFFFFF, hv), false);
++                com.rrm.mobslearn.client.Ui.text(g, font, label, cx + (grp == null ? 6 : 20), y + 4, sel ? 0xFFFFFFFF : Ui.mix(DIM, 0xFFFFFFFF, hv), false);
+                 chipHits.add(new int[]{cx, y, lw, 15});
+                 chipGroups.add(grp);
+                 cx += lw + 4;
+@@ -225,7 +225,7 @@
+             icon(g, "writable_book", ix + 12, y + 14, 32);
+             int ty = y + 16;
+             for (FormattedCharSequence line : font.split(Component.translatable("mobslearn.journal.empty"), iw - 64)) {
+-                g.drawString(font, line, ix + 54, ty, DIM, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, line, ix + 54, ty, DIM, false);
+                 ty += 11;
+             }
+             y += 70;
+@@ -245,8 +245,8 @@
+                 Component pill = Component.translatable("mobslearn.journal.day", e.day());
+                 int pw = font.width(pill) + 12;
+                 g.fill(ix, y, ix + pw, y + 14, 0x40FFD25A);
+-                g.drawString(font, pill, ix + 6, y + 3, Ui.GOLD, false);
+-                g.drawString(font, when, ix + pw + 6, y + 3, FAINT, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, pill, ix + 6, y + 3, Ui.GOLD, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, when, ix + pw + 6, y + 3, FAINT, false);
+                 g.fill(ix + pw + 12 + font.width(when), y + 7, ix + iw, y + 8, 0x18FFFFFF);
+                 y += 20;
+             }
+@@ -267,26 +267,26 @@
+             icon(g, s.iconId(), ix + 16, y + 7, 24);
+             int ty = y + 7;
+             for (FormattedCharSequence line : headL) {
+-                g.drawString(font, line, ix + 46, ty, 0xFFFFFFFF, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, line, ix + 46, ty, 0xFFFFFFFF, false);
+                 ty += 11;
+             }
+             String lv = roman(e.level());
+             int lw = font.width(lv) + 10;
+             g.fill(ix + iw - 8 - lw, y + 6, ix + iw - 8, y + 18, 0x50FFD25A);
+-            g.drawString(font, lv, ix + iw - 3 - lw, y + 8, Ui.GOLD, false);
++            com.rrm.mobslearn.client.Ui.text(g, font, lv, ix + iw - 3 - lw, y + 8, Ui.GOLD, false);
+             for (FormattedCharSequence line : whyL) {
+-                g.drawString(font, line, ix + 46, ty, TEAL, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, line, ix + 46, ty, TEAL, false);
+                 ty += 10;
+             }
+             for (int d = 0; d < Math.min(2, descL.size()); d++) {
+-                g.drawString(font, descL.get(d), ix + 46, ty, DIM, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, descL.get(d), ix + 46, ty, DIM, false);
+                 ty += 10;
+             }
+             y += eh + 6;
+             shown++;
+         }
+         if (shown == 0 && !k.journal.isEmpty()) {
+-            g.drawString(font, Component.translatable("mobslearn.journal.none"), ix, y, FAINT, false);
++            com.rrm.mobslearn.client.Ui.text(g, font, Component.translatable("mobslearn.journal.none"), ix, y, FAINT, false);
+             y += 14;
+         }
+         contentH = y + Math.round(scroll) - top + 10;
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java	2026-10-28 19:44:35.816767724 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java	2026-10-28 19:44:36.090982746 +0000
+@@ -211,7 +211,7 @@
+             else detail = null;
+             return true;
+         }
+-        if (MobsLearnClient.treeKey != null && MobsLearnClient.treeKey.matches(event)) {
++        if (MobsLearnClient.treeKey != null && MobsLearnClient.treeKey.matches(keyCode, scanCode)) {
+             if (overlayOpen()) {
+                 if (help) closeHelp();
+                 else detail = null;
+@@ -285,13 +285,13 @@
+         Ui.click(pitch);
+     }
+ 
+-    @Override
+-    public void renderBackground(GuiGraphics g, int mx, int my, float a) {
++    public void mlBackground(GuiGraphics g, int mx, int my, float a) {
+         g.fillGradient(0, 0, this.width, this.height, 0xE80E150D, 0xF40A0E0A);
+     }
+ 
+     @Override
+     public void render(GuiGraphics g, int mx, int my, float a) {
++        mlBackground(g, mx, my, a);
+         long now = Util.getMillis();
+         dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
+         lastFrame = now;
+@@ -344,7 +344,7 @@
+         int logoH = 24, logoW = Math.round(logoH * (Ui.LOGO_W / (float) Ui.LOGO_H));
+         Ui.logoAt(g, 10, 7, logoW, logoH);
+         Component credit = Component.translatable("mobslearn.credit");
+-        g.drawString(this.font, credit, 10, 47, 0x90F6E7C1, false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, credit, 10, 47, 0x90F6E7C1, false);
+ 
+         boolean synced = ClientKnowledge.synced();
+         int intel = synced ? kn.intelligence() : 0;
+@@ -363,8 +363,8 @@
+         g.pose().pushPose();
+         g.pose().translate(cx, 6, 0);
+         g.pose().scale(labelScale, labelScale, 1);
+-        g.drawString(this.font, label, -labelW / 2, 0, DIM, false);
+-        g.drawString(this.font, pct, -labelW / 2 + this.font.width(label), 0, GOLD, false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, label, -labelW / 2, 0, DIM, false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, pct, -labelW / 2 + this.font.width(label), 0, GOLD, false);
+         g.pose().popPose();
+ 
+         int barY = 19;
+@@ -411,7 +411,7 @@
+             underColor = GOLD;
+         }
+         String u = this.font.plainSubstrByWidth(under.getString(), Math.max(60, right - left));
+-        g.drawString(this.font, u, cx - this.font.width(u) / 2, 31, underColor, false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, u, cx - this.font.width(u) / 2, 31, underColor, false);
+         boolean labelHot = !overlayOpen() && mouseY >= 3 && mouseY < 17 && mouseX >= cx - lw / 2 - 3 && mouseX < cx + lw / 2 + 3;
+         float lh = hoverAnim("intelLabel", labelHot);
+         if (lh > 0.02f) Ui.fill(g, cx - lw / 2f * lh, 16, lw * lh, 1, fade(ACCENT, lh));
+@@ -442,7 +442,7 @@
+             int ry = sideY + 4 + e.y - scroll;
+             if (ry > sideY + sideH || ry + e.h < sideY) continue;
+             if (e.header != null) {
+-                g.drawString(this.font, Component.translatable(e.header), sideX + 9, ry + 7, FAINT, false);
++                com.rrm.mobslearn.client.Ui.text(g, this.font, Component.translatable(e.header), sideX + 9, ry + 7, FAINT, false);
+                 continue;
+             }
+             MobGroup grp = e.group;
+@@ -460,9 +460,9 @@
+             String cnt = learned + "/" + skills.size();
+             int cw = this.font.width(cnt);
+             String nm = this.font.plainSubstrByWidth(grp.displayName().getString(), sideW - 36 - cw - 6);
+-            g.drawString(this.font, nm, sideX + 29, ry + 4, sel ? 0xFFFFFFFF : (hot ? TEXT : 0xFFCFC6AC), false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, nm, sideX + 29, ry + 4, sel ? 0xFFFFFFFF : (hot ? TEXT : 0xFFCFC6AC), false);
+             g.pose().popPose();
+-            g.drawString(this.font, cnt, sideX + sideW - 7 - cw, ry + 4, learned > 0 ? grp.color : 0x50FFFFFF, false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, cnt, sideX + sideW - 7 - cw, ry + 4, learned > 0 ? grp.color : 0x50FFFFFF, false);
+             int pw = sideW - 36;
+             int levels = kn.groupLevels(grp), max = skills.size() * Skill.MAX_LEVEL;
+             g.fill(sideX + 29, ry + 16, sideX + 29 + pw, ry + 18, 0x22FFFFFF);
+@@ -506,7 +506,7 @@
+         int learned = 0;
+         for (Skill s : skills) if (kn.level(s) > 0) learned++;
+         Component sub = Component.translatable("mobslearn.screen.learned_skills", learned, skills.size());
+-        g.drawString(this.font, sub, tx, hy + 18, fade(DIM, headIn), false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, sub, tx, hy + 18, fade(DIM, headIn), false);
+         int levels = kn.groupLevels(grp), maxLv = skills.size() * Skill.MAX_LEVEL;
+         int pbx = tx + this.font.width(sub) + 8, pbw = Math.min(120, mainX + mainW - 14 - pbx);
+         if (pbw > 20) {
+@@ -586,16 +586,16 @@
+         int tagX = x + cardW - 6;
+         if (s.combat()) {
+             tagX -= this.font.width("⚔");
+-            g.drawString(this.font, "⚔", tagX, cy + 7, fade(RED, appear), false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, "⚔", tagX, cy + 7, fade(RED, appear), false);
+             tagX -= 3;
+         }
+         if (s.absurd()) {
+             tagX -= this.font.width("✦");
+-            g.drawString(this.font, "✦", tagX, cy + 7, fade(PINK, appear), false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, "✦", tagX, cy + 7, fade(PINK, appear), false);
+             tagX -= 3;
+         }
+         String name = this.font.plainSubstrByWidth(s.displayName().getString(), tagX - (x + 32) - 2);
+-        g.drawString(this.font, name, x + 32, cy + 7, fade(lvl > 0 ? 0xFFFFFFFF : 0xFFB5B09E, appear), false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, name, x + 32, cy + 7, fade(lvl > 0 ? 0xFFFFFFFF : 0xFFB5B09E, appear), false);
+ 
+         double pts = world ? kn.intelligence() : kn.points(s);
+         int next = s.nextThreshold(pts);
+@@ -611,7 +611,7 @@
+             if (p <= lvl) g.fill(sx, cy + 20, sx + 10, cy + 23, fade(GOLD, appear));
+             else if (p == lvl + 1 && f > 0) Ui.fill(g, sx, cy + 20, 10 * f * appear, 3, fade(0x90000000 | (edge & 0xFFFFFF), appear));
+         }
+-        if (lvl > 0) g.drawString(this.font, Component.translatable("mobslearn.screen.lvl", lvl, s.maxLevel()), x + 32 + 3 * 12 + 3, cy + 18, fade(GOLD, appear), false);
++        if (lvl > 0) com.rrm.mobslearn.client.Ui.text(g, this.font, Component.translatable("mobslearn.screen.lvl", lvl, s.maxLevel()), x + 32 + 3 * 12 + 3, cy + 18, fade(GOLD, appear), false);
+         g.pose().popPose();
+     }
+ 
+@@ -651,7 +651,7 @@
+             big(g, s.displayName(), x + pad + 50, y + pad + 2, 1.35f, fade(0xFFFFFFFF, p));
+             int cx = x + pad + 50;
+             Component grpName = s.group().displayName();
+-            g.drawString(this.font, grpName, cx, y + pad + 18, fade(s.group().color, p), false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, grpName, cx, y + pad + 18, fade(s.group().color, p), false);
+             cx += this.font.width(grpName) + 6;
+             if (s.combat()) cx = chip(g, Component.translatable("mobslearn.wiki.tag.pvp"), cx, y + pad + 16, RED, p);
+             if (s.absurd()) cx = chip(g, Component.translatable("mobslearn.wiki.tag.absurd"), cx, y + pad + 16, PINK, p);
+@@ -660,10 +660,10 @@
+                 g.fill(sx, y + pad + 31, sx + 13, y + pad + 35, fade(i <= lvl ? GOLD : 0x30FFFFFF, p));
+             }
+             Component lv = lvl > 0 ? Component.translatable("mobslearn.screen.lvl", lvl, s.maxLevel()) : Component.translatable("mobslearn.screen.not_learned");
+-            g.drawString(this.font, lv, x + pad + 50 + 3 * 16 + 4, y + pad + 29, fade(lvl > 0 ? GOLD : FAINT, p), false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, lv, x + pad + 50 + 3 * 16 + 4, y + pad + 29, fade(lvl > 0 ? GOLD : FAINT, p), false);
+             boolean hc = mouseX >= x + w - 18 && mouseX < x + w - 4 && mouseY >= y + 4 && mouseY < y + 18;
+             closeRect = new int[]{x + w - 18, y + 4, 14, 14};
+-            g.drawString(this.font, "✕", x + w - 14, y + 7, fade(hc ? 0xFFFFFFFF : DIM, p), false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, "✕", x + w - 14, y + 7, fade(hc ? 0xFFFFFFFF : DIM, p), false);
+         }
+         int cy = y + pad + 50;
+         cy = para(g, s.description(), x + pad, cy, iw, TEXT, p);
+@@ -683,13 +683,13 @@
+             boolean current = lvl == i;
+             if (g != null) {
+                 if (current) g.fill(x + pad - 4, cy - 2, x + w - pad + 4, cy + 20, fade(0x10FFFFFF, p));
+-                g.drawString(this.font, done ? "●" : "○", x + pad, cy, fade(done ? GOLD : FAINT, p), false);
+-                g.drawString(this.font, Component.translatable("mobslearn.screen.lvl_n", i + 1), x + pad + 12, cy, fade(done ? 0xFFFFFFFF : DIM, p), false);
++                com.rrm.mobslearn.client.Ui.text(g, this.font, done ? "●" : "○", x + pad, cy, fade(done ? GOLD : FAINT, p), false);
++                com.rrm.mobslearn.client.Ui.text(g, this.font, Component.translatable("mobslearn.screen.lvl_n", i + 1), x + pad + 12, cy, fade(done ? 0xFFFFFFFF : DIM, p), false);
+                 Component need = world ? Component.translatable("mobslearn.detail.need_world", th) : Component.translatable("mobslearn.detail.need", th);
+                 Component right = done ? Component.literal("✔").withStyle(ChatFormatting.GREEN) : need;
+                 int rw = this.font.width(right);
+-                if (done) g.drawString(this.font, need, x + w - pad - rw - 6 - this.font.width(need), cy, fade(FAINT, p), false);
+-                g.drawString(this.font, right, x + w - pad - rw, cy, fade(done ? ACCENT : DIM, p), false);
++                if (done) com.rrm.mobslearn.client.Ui.text(g, this.font, need, x + w - pad - rw - 6 - this.font.width(need), cy, fade(FAINT, p), false);
++                com.rrm.mobslearn.client.Ui.text(g, this.font, right, x + w - pad - rw, cy, fade(done ? ACCENT : DIM, p), false);
+                 if (current) {
+                     int prev = i == 0 ? 0 : s.thresholds()[i - 1];
+                     float f = (float) Mth.clamp((pts - prev) / Math.max(1, th - prev), 0, 1);
+@@ -698,7 +698,7 @@
+                     Ui.fill(g, bx, cy + 12, bw * f * p, 3, fade(edge, p));
+                     Component now = world ? Component.translatable("mobslearn.detail.now_world", (int) pts, th)
+                         : Component.translatable("mobslearn.detail.now", (int) Math.floor(pts), th);
+-                    g.drawString(this.font, now, x + w - pad - this.font.width(now), cy + 10, fade(FAINT, p), false);
++                    com.rrm.mobslearn.client.Ui.text(g, this.font, now, x + w - pad - this.font.width(now), cy + 10, fade(FAINT, p), false);
+                 }
+             }
+             cy += current ? 22 : 13;
+@@ -717,7 +717,7 @@
+         cy += 10;
+         if (g != null) {
+             Component close = Component.translatable("mobslearn.detail.close");
+-            g.drawString(this.font, close, x + (w - this.font.width(close)) / 2, cy, fade(FAINT, p), false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, close, x + (w - this.font.width(close)) / 2, cy, fade(FAINT, p), false);
+         }
+         cy += 10 + pad - 2;
+         return cy - y;
+@@ -756,8 +756,8 @@
+                 g.fill(x + pad, top, x + pad + 22, top + 22, fade(0x248BE03A, local));
+                 Ui.border(g, x + pad, top, 22, 22, fade(0x608BE03A, local));
+                 if (local > 0.5f) g.renderItem(WikiIcons.stack(icons[i]), x + pad + 3, top + 3);
+-                g.drawString(this.font, Component.literal(String.valueOf(i + 1)), x + pad + 23 - 6, top + 15, fade(ACCENT, local), true);
+-                g.drawString(this.font, Component.translatable("mobslearn.help." + (i + 1) + ".title"), textX, ty, fade(0xFFFFFFFF, local), false);
++                com.rrm.mobslearn.client.Ui.text(g, this.font, Component.literal(String.valueOf(i + 1)), x + pad + 23 - 6, top + 15, fade(ACCENT, local), true);
++                com.rrm.mobslearn.client.Ui.text(g, this.font, Component.translatable("mobslearn.help." + (i + 1) + ".title"), textX, ty, fade(0xFFFFFFFF, local), false);
+             }
+             ty += 11;
+             ty = para(g, Component.translatable("mobslearn.help." + (i + 1) + ".text"), textX, ty, textW, DIM, local);
+@@ -774,9 +774,9 @@
+         for (int i = 0; i < 4; i++) {
+             int lx = x + pad + (i % 2) * colW, ly = cy + (i / 2) * 12;
+             if (g != null) {
+-                g.drawString(this.font, sym[i], lx, ly, fade(symCol[i], p), false);
++                com.rrm.mobslearn.client.Ui.text(g, this.font, sym[i], lx, ly, fade(symCol[i], p), false);
+                 Component d = Component.translatable("mobslearn.help.legend." + keys[i]);
+-                g.drawString(this.font, this.font.plainSubstrByWidth(d.getString(), colW - 26), lx + 22, ly, fade(DIM, p), false);
++                com.rrm.mobslearn.client.Ui.text(g, this.font, this.font.plainSubstrByWidth(d.getString(), colW - 26), lx + 22, ly, fade(DIM, p), false);
+             }
+         }
+         cy += 26;
+@@ -786,7 +786,7 @@
+             float hv = hoverAnim("helpOk", hot);
+             g.fill(bx, cy, bx + bw, cy + bh, fade(lerpColor(0xFF4E9A1E, 0xFF62B828, hv), p));
+             Component ok = Component.translatable("mobslearn.help.ok");
+-            g.drawString(this.font, ok, bx + (bw - this.font.width(ok)) / 2, cy + 6, fade(0xFFFFFFFF, p), false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, ok, bx + (bw - this.font.width(ok)) / 2, cy + 6, fade(0xFFFFFFFF, p), false);
+             helpOkRect = new int[]{bx, cy, bw, bh};
+         }
+         cy += bh + pad;
+@@ -796,21 +796,21 @@
+     private int chip(GuiGraphics g, Component c, int x, int y, int color, float p) {
+         int w = this.font.width(c) + 6;
+         g.fill(x, y, x + w, y + 11, fade(0x40000000 | (color & 0xFFFFFF), p));
+-        g.drawString(this.font, c, x + 3, y + 2, fade(color, p), false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, c, x + 3, y + 2, fade(color, p), false);
+         return x + w + 4;
+     }
+ 
+     private int kicker(GuiGraphics g, Component c, int x, int y, int color, float p) {
+         if (g != null) {
+             g.fill(x, y + 3, x + 2, y + 8, fade(color, p));
+-            g.drawString(this.font, c, x + 6, y + 1, fade(color, p), false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, c, x + 6, y + 1, fade(color, p), false);
+         }
+         return y + 13;
+     }
+ 
+     private int para(GuiGraphics g, Component c, int x, int y, int w, int color, float p) {
+         for (FormattedCharSequence line : this.font.split(c, w)) {
+-            if (g != null) g.drawString(this.font, line, x, y, fade(color, p), false);
++            if (g != null) com.rrm.mobslearn.client.Ui.text(g, this.font, line, x, y, fade(color, p), false);
+             y += 10;
+         }
+         return y;
+@@ -818,7 +818,7 @@
+ 
+     private int paraCentered(GuiGraphics g, Component c, int x, int y, int w, int color, float p) {
+         for (FormattedCharSequence line : this.font.split(c, w)) {
+-            if (g != null) g.drawString(this.font, line, x + (w - this.font.width(line)) / 2, y, fade(color, p), false);
++            if (g != null) com.rrm.mobslearn.client.Ui.text(g, this.font, line, x + (w - this.font.width(line)) / 2, y, fade(color, p), false);
+             y += 10;
+         }
+         return y;
+@@ -832,7 +832,7 @@
+         g.pose().pushPose();
+         g.pose().translate(x, y, 0);
+         g.pose().scale(scale, scale, 1);
+-        g.drawString(this.font, c, center ? -this.font.width(c) / 2 : 0, 0, color, false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, c, center ? -this.font.width(c) / 2 : 0, 0, color, false);
+         g.pose().popPose();
+     }
+ 
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java b/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java	2026-10-28 19:44:35.676844177 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java	2026-10-28 19:44:36.090190837 +0000
+@@ -54,13 +54,13 @@
+         minecraft.setScreen(parent);
+     }
+ 
+-    @Override
+-    public void renderBackground(GuiGraphics g, int mx, int my, float partial) {
++    public void mlBackground(GuiGraphics g, int mx, int my, float partial) {
+         g.fillGradient(0, 0, width, height, 0xF00E150D, 0xFA080C08);
+     }
+ 
+     @Override
+     public void render(GuiGraphics g, int mx, int my, float partial) {
++        mlBackground(g, mx, my, partial);
+         float t = Math.max(0f, Math.min(1f, (Util.getMillis() - openedAt) / 240f));
+         float intro = 1f - (float) Math.pow(1f - t, 3);
+         g.pose().pushPose();
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java b/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java
+--- a/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java	2026-10-28 19:44:35.818828123 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java	2026-10-28 19:44:36.091047249 +0000
+@@ -67,11 +67,11 @@
+ 
+         ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
+             if (screen instanceof TitleScreen) {
+-                Screens.getWidgets(screen).add(new LogoButton(6, net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("cati") ? 54 : 6, 104, 44,
++                Screens.getButtons(screen).add(new LogoButton(6, net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("cati") ? 54 : 6, 104, 44,
+                     () -> client.setScreen(new WikiScreen(screen))));
+             }
+             if (screen instanceof PauseScreen) {
+-                Screens.getWidgets(screen).add(new MlButton(6, h - 26, 130, 20, Component.translatable("mobslearn.pause.button"),
++                Screens.getButtons(screen).add(new MlButton(6, h - 26, 130, 20, Component.translatable("mobslearn.pause.button"),
+                     b -> client.setScreen(new KnowledgeScreen(screen))));
+             }
+         });
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/NoticeHud.java b/src/main/java/com/rrm/mobslearn/client/NoticeHud.java
+--- a/src/main/java/com/rrm/mobslearn/client/NoticeHud.java	2026-10-28 19:44:35.993340209 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/NoticeHud.java	2026-10-28 19:44:36.090475423 +0000
+@@ -119,7 +119,7 @@
+             current = null;
+             return;
+         }
+-        if (mc.gui.hud.isHidden()) return;
++        if (mc.options.hideGui) return;
+         Font font = mc.font;
+         Style st = current.style;
+         List<FormattedCharSequence> lines = font.split(current.text, WIDTH - 66);
+@@ -151,10 +151,10 @@
+         else g.renderItem(new ItemStack(st.icon), 0, 0);
+         g.pose().popPose();
+         int tx = 54;
+-        g.drawString(font, Component.translatable(st.kicker).getString().toUpperCase(Locale.ROOT), tx, y + 7, (a << 24) | color, false);
++        com.rrm.mobslearn.client.Ui.text(g, font, Component.translatable(st.kicker).getString().toUpperCase(Locale.ROOT), tx, y + 7, (a << 24) | color, false);
+         int ly = y + 20;
+         for (FormattedCharSequence line : lines) {
+-            g.drawString(font, line, tx, ly, (a << 24) | 0xFFFFFF, false);
++            com.rrm.mobslearn.client.Ui.text(g, font, line, tx, ly, (a << 24) | 0xFFFFFF, false);
+             ly += 10;
+         }
+         float life = Mth.clamp(1f - (age - IN) / (float) showFor, 0f, 1f);
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java b/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java	2026-10-28 19:44:35.821778491 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java	2026-10-28 19:44:36.091290857 +0000
+@@ -127,13 +127,13 @@
+         minecraft.setScreen(parent);
+     }
+ 
+-    @Override
+-    public void renderBackground(GuiGraphics g, int mx, int my, float partial) {
++    public void mlBackground(GuiGraphics g, int mx, int my, float partial) {
+         g.fillGradient(0, 0, width, height, 0xF00E150D, 0xFA080C08);
+     }
+ 
+     @Override
+     public void render(GuiGraphics g, int mx, int my, float partial) {
++        mlBackground(g, mx, my, partial);
+         long now = Util.getMillis();
+         if (sentAt != 0 && ClientKnowledge.revision() > sentRevision) {
+             Knowledge k = ClientKnowledge.get();
+@@ -157,7 +157,7 @@
+         String[] labels = {"enabled", "speed", "absurd", "combat", "difficulty", "warp"};
+         for (int i = 0; i < labels.length; i++) {
+             String label = font.plainSubstrByWidth(Component.translatable("mobslearn.settings." + labels[i]).getString(), w / 2 - 20);
+-            g.drawString(font, label, x + 12, y + 38 + row * i, Ui.CREAM, false);
++            com.rrm.mobslearn.client.Ui.text(g, font, label, x + 12, y + 38 + row * i, Ui.CREAM, false);
+         }
+         super.render(g, mx, my, partial);
+         g.pose().popPose();
+@@ -187,7 +187,7 @@
+         }
+ 
+         @Override
+-        public void extractWidgetRenderState(GuiGraphics g, int mx, int my, float partial) {
++        public void renderWidget(GuiGraphics g, int mx, int my, float partial) {
+             int x = getX(), y = getY(), w = getWidth();
+             g.fill(x, y, x + w, y + 20, active ? 0xC0101410 : 0x80101010);
+             Ui.border(g, x, y, w, 20, active && isHovered() ? Ui.GREEN : Ui.HAIRLINE);
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java b/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java	2026-10-28 19:44:35.819633028 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java	2026-10-28 19:44:36.091349316 +0000
+@@ -120,8 +120,7 @@
+         return Math.max(0, contentH - (height - 80));
+     }
+ 
+-    @Override
+-    public void renderBackground(GuiGraphics g, int mx, int my, float partial) {
++    public void mlBackground(GuiGraphics g, int mx, int my, float partial) {
+         g.fillGradient(0, 0, width, height, 0xF00E150D, 0xFA080C08);
+     }
+ 
+@@ -160,6 +159,7 @@
+ 
+     @Override
+     public void render(GuiGraphics g, int mx, int my, float partial) {
++        mlBackground(g, mx, my, partial);
+         long now = Util.getMillis();
+         dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
+         lastFrame = now;
+@@ -180,7 +180,7 @@
+         if (rows.isEmpty()) {
+             Component empty = Component.translatable(received ? "mobslearn.settlements.empty" : "mobslearn.settlements.loading");
+             for (FormattedCharSequence line : font.split(empty, w - 28)) {
+-                g.drawString(font, line, x + 14, y + 4, Ui.MUTED, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, line, x + 14, y + 4, Ui.MUTED, false);
+                 y += 11;
+             }
+         }
+@@ -211,30 +211,30 @@
+                 com.rrm.mobslearn.client.Ui.blitUV(g,com.rrm.mobslearn.MobsLearn.id("textures/gui/icon/" + icon(r) + ".png"), x + 16, cy + 7, x + 48, cy + 39, 0f, 1f, 0f, 1f);
+             }
+             Component name = Component.translatable(r.camp ? "mobslearn.settlements.kind.camp" : "mobslearn.settlements.kind." + r.kind);
+-            g.drawString(font, name, x + 56, cy + 7, Anim.fade(0xFFFFFFFF, local), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, name, x + 56, cy + 7, Anim.fade(0xFFFFFFFF, local), false);
+             int chipX = x + 56 + font.width(name) + 6;
+             String stateKey = r.raiding ? "raiding" : !active ? r.state : !r.kind.equals("village") && r.neutral ? "neutral" : "active";
+             Component chip = Component.translatable("mobslearn.settlements.state." + stateKey);
+             int cw = font.width(chip) + 6;
+             g.fill(chipX, cy + 5, chipX + cw, cy + 16, Anim.fade(0x40000000 | (accent & 0xFFFFFF), local));
+-            g.drawString(font, chip, chipX + 3, cy + 7, Anim.fade(accent, local), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, chip, chipX + 3, cy + 7, Anim.fade(accent, local), false);
+             Component line = Component.translatable("mobslearn.settlements.info", r.tier, r.pop);
+             if (r.projects > 0) line = line.copy().append(Component.translatable("mobslearn.settlements.building", r.projects));
+-            g.drawString(font, line, x + 56, cy + 19, Anim.fade(Ui.MUTED, local), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, line, x + 56, cy + 19, Anim.fade(Ui.MUTED, local), false);
+             Component where = r.known ? Component.translatable("mobslearn.settlements.where", r.x, r.y, r.z)
+                 : Component.translatable("mobslearn.settlements.where", "***", "***", "***");
+-            g.drawString(font, where, x + 56, cy + 31, Anim.fade(r.known ? 0xFF6E6A5C : 0xFF55524A, local), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, where, x + 56, cy + 31, Anim.fade(r.known ? 0xFF6E6A5C : 0xFF55524A, local), false);
+             if (r.known) {
+                 double dx = r.x + 0.5 - px, dz = r.z + 0.5 - pz;
+                 String d = Math.round(Math.sqrt(dx * dx + dz * dz)) + " m";
+-                g.drawString(font, d, x + w - 16 - font.width(d), cy + 31, Anim.fade(Ui.CREAM, local), false);
++                com.rrm.mobslearn.client.Ui.text(g, font, d, x + w - 16 - font.width(d), cy + 31, Anim.fade(Ui.CREAM, local), false);
+                 double angle = Math.toDegrees(Math.atan2(-dx, dz)) - yaw;
+                 String[] arrows = {"↑", "↗", "→", "↘", "↓", "↙", "←", "↖"};
+                 int idx = Math.floorMod((int) Math.round(angle / 45.0), 8);
+                 Ui.scaledText(g, font, Component.literal(arrows[idx]), x + w - 24, cy + 9, 1.6f, Anim.fade(accent, local), true, false);
+             } else {
+                 Component unknown = Component.translatable("mobslearn.settlements.unknown");
+-                g.drawString(font, unknown, x + w - 16 - font.width(unknown), cy + 31, Anim.fade(0xFF6E6A5C, local), false);
++                com.rrm.mobslearn.client.Ui.text(g, font, unknown, x + w - 16 - font.width(unknown), cy + 31, Anim.fade(0xFF6E6A5C, local), false);
+                 Ui.scaledText(g, font, Component.literal("?"), x + w - 24, cy + 9, 1.6f, Anim.fade(0xFF6E6A5C, local), true, false);
+             }
+             if (op > 0.05f) {
+@@ -243,7 +243,7 @@
+                 for (Component c : info) {
+                     for (FormattedCharSequence s : font.split(c, w - 80)) {
+                         if (dy + 10 > cy + cardH) break;
+-                        g.drawString(font, s, x + 56, dy + 2, Anim.fade(Ui.CREAM, op * local), false);
++                        com.rrm.mobslearn.client.Ui.text(g, font, s, x + 56, dy + 2, Anim.fade(Ui.CREAM, op * local), false);
+                         dy += 10;
+                     }
+                     dy += 2;
+@@ -254,7 +254,7 @@
+                     boolean fh = mx >= fx && mx < fx + fw && my >= fy && my < fy + 13;
+                     g.fill(fx, fy, fx + fw, fy + 13, Anim.fade(fh ? 0x60E5534B : 0x30E5534B, op));
+                     Ui.border(g, fx, fy, fw, 13, Anim.fade(fh ? Ui.RED : 0x60E5534B, op));
+-                    g.drawString(font, forget, fx + 6, fy + 3, Anim.fade(fh ? 0xFFFFFFFF : 0xFFF0A6A0, op), false);
++                    com.rrm.mobslearn.client.Ui.text(g, font, forget, fx + 6, fy + 3, Anim.fade(fh ? 0xFFFFFFFF : 0xFFF0A6A0, op), false);
+                     forgetHits.add(new int[]{i, fx, fy, fw, 13});
+                 }
+             }
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/Ui.java b/src/main/java/com/rrm/mobslearn/client/Ui.java
+--- a/src/main/java/com/rrm/mobslearn/client/Ui.java	2026-10-28 19:44:35.524677827 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/Ui.java	2026-10-28 19:44:36.091149101 +0000
+@@ -103,7 +103,7 @@
+         g.pose().translate(x, y, 0);
+         g.pose().scale(scale, scale, 1);
+         int dx = centered ? -font.width(text) / 2 : 0;
+-        g.drawString(font, text, dx, 0, color, shadow);
++        text(g, font, text, dx, 0, color, shadow);
+         g.pose().popPose();
+     }
+ 
+@@ -112,15 +112,15 @@
+     }
+ 
+     public static void center(GuiGraphics g, Font font, Component text, int cx, int y, int color) {
+-        g.drawString(font, text, cx - font.width(text) / 2, y, color, false);
++        text(g, font, text, cx - font.width(text) / 2, y, color, false);
+     }
+ 
+     public static void center(GuiGraphics g, Font font, String text, int cx, int y, int color) {
+-        g.drawString(font, text, cx - font.width(text) / 2, y, color, false);
++        text(g, font, text, cx - font.width(text) / 2, y, color, false);
+     }
+ 
+     public static void center(GuiGraphics g, Font font, net.minecraft.util.FormattedCharSequence text, int cx, int y, int color) {
+-        g.drawString(font, text, cx - font.width(text) / 2, y, color, false);
++        text(g, font, text, cx - font.width(text) / 2, y, color, false);
+     }
+ 
+     public static void outlinedTitle(GuiGraphics g, Font font, Component text, int cx, int y, float scale, int color) {
+@@ -135,6 +135,41 @@
+         com.rrm.mobslearn.client.Ui.blitUV(g,tex, x, y, x + w, y + h, u0, u1, v0, v1);
+     }
+ 
++    private static boolean visible(int color) {
++        return (color >>> 24) >= 4;
++    }
++
++    public static int text(GuiGraphics g, net.minecraft.client.gui.Font f, String t, int x, int y, int c) {
++        return visible(c) ? g.drawString(f, t, x, y, c) : 0;
++    }
++
++    public static int text(GuiGraphics g, net.minecraft.client.gui.Font f, String t, int x, int y, int c, boolean sh) {
++        return visible(c) ? g.drawString(f, t, x, y, c, sh) : 0;
++    }
++
++    public static int text(GuiGraphics g, net.minecraft.client.gui.Font f, Component t, int x, int y, int c) {
++        return visible(c) ? g.drawString(f, t, x, y, c) : 0;
++    }
++
++    public static int text(GuiGraphics g, net.minecraft.client.gui.Font f, Component t, int x, int y, int c, boolean sh) {
++        return visible(c) ? g.drawString(f, t, x, y, c, sh) : 0;
++    }
++
++    public static int text(GuiGraphics g, net.minecraft.client.gui.Font f, net.minecraft.util.FormattedCharSequence t, int x, int y, int c) {
++        return visible(c) ? g.drawString(f, t, x, y, c) : 0;
++    }
++
++    public static int text(GuiGraphics g, net.minecraft.client.gui.Font f, net.minecraft.util.FormattedCharSequence t, int x, int y, int c, boolean sh) {
++        return visible(c) ? g.drawString(f, t, x, y, c, sh) : 0;
++    }
++
++    public static void blitUV(GuiGraphics g, ResourceLocation tex, int x0, int y0, int x1, int y1, float u0, float u1, float v0, float v1) {
++        int w = x1 - x0, h = y1 - y0;
++        if (w <= 0 || h <= 0) return;
++        int t = 4096;
++        g.blit(tex, x0, y0, w, h, u0 * t, v0 * t, Math.max(1, Math.round((u1 - u0) * t)), Math.max(1, Math.round((v1 - v0) * t)), t, t);
++    }
++
+     public static void slot(GuiGraphics g, int x, int y, int size) {
+         g.fill(x, y, x + size, y + size, 0x40000000);
+     }
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java b/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java
+--- a/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java	2026-10-28 19:44:35.561625109 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java	2026-10-28 19:44:36.090639281 +0000
+@@ -25,7 +25,7 @@
+             MobsLearnRules.set(state.getGameRules(), enabled, null);
+             button.setMessage(mobslearn$toggleLabel(enabled));
+         }).size(210, 20).tooltip(Tooltip.create(Component.translatable("mobslearn.creation.tooltip"))).build();
+-        state.addListener(s -> toggle.setMessage(mobslearn$MobsLearnRules.get(toggleLabel(s.getGameRules()))));
++        state.addListener(s -> toggle.setMessage(mobslearn$toggleLabel(MobsLearnRules.get(s.getGameRules()))));
+         int[] rows = {0};
+         layout.visitChildren(child -> rows[0]++);
+         layout.addChild(toggle, rows[0], 0);
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java b/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java
+--- a/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java	2026-10-28 19:44:35.559988587 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java	1970-01-01 00:00:00.000000000 +0000
+@@ -1,30 +0,0 @@
+-package com.rrm.mobslearn.client.mixin;
+-
+-import net.minecraft.client.model.HumanoidModel;
+-import net.minecraft.client.model.geom.ModelPart;
+-import net.minecraft.client.model.ZombieModel;
+-import net.minecraft.client.renderer.entity.state.ZombieRenderState;
+-import net.minecraft.world.InteractionHand;
+-import net.minecraft.world.entity.HumanoidArm;
+-import net.minecraft.world.item.Items;
+-import org.spongepowered.asm.mixin.Mixin;
+-import org.spongepowered.asm.mixin.injection.At;
+-import org.spongepowered.asm.mixin.injection.Inject;
+-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+-
+-@Mixin(ZombieModel.class)
+-public abstract class ZombieModelMixin {
+-    @Inject(method = "setupAttackAnimation(Lnet/minecraft/client/renderer/entity/state/ZombieRenderState;)V", at = @At("TAIL"), require = 0)
+-    private void mobslearn$block(ZombieRenderState state, CallbackInfo ci) {
+-        if (!state.isUsingItem) return;
+-        HumanoidArm arm = state.useItemHand == InteractionHand.MAIN_HAND ? state.mainArm : state.mainArm.getOpposite();
+-        boolean shield = arm == HumanoidArm.LEFT ? state.leftHandItemStack != null && state.leftHandItemStack.is(Items.SHIELD)
+-            : state.rightHandItemStack != null && state.rightHandItemStack.is(Items.SHIELD);
+-        if (!shield) return;
+-        HumanoidModel<?> model = (HumanoidModel<?>) (Object) this;
+-        ModelPart part = arm == HumanoidArm.LEFT ? model.leftArm : model.rightArm;
+-        part.xRot = -0.95f;
+-        part.yRot = arm == HumanoidArm.LEFT ? 0.52f : -0.52f;
+-        part.zRot = 0f;
+-    }
+-}
+diff -ruN a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java b/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java	2026-10-28 19:44:36.022054780 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java	2026-10-28 19:44:36.090793396 +0000
+@@ -248,13 +248,13 @@
+         return true;
+     }
+ 
+-    @Override
+-    public void renderBackground(GuiGraphics g, int mx, int my, float a) {
++    public void mlBackground(GuiGraphics g, int mx, int my, float a) {
+         g.fillGradient(0, 0, this.width, this.height, BG2, BG);
+     }
+ 
+     @Override
+     public void render(GuiGraphics g, int mx, int my, float a) {
++        mlBackground(g, mx, my, a);
+         long now = Util.getMillis();
+         dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
+         lastFrame = now;
+@@ -348,7 +348,7 @@
+             boolean hot = mouseY < NAV_H && mouseX >= x && mouseX < x + w + 14;
+             boolean act = ids[i].equals(active);
+             navLinks.add(new NavLink(ids[i], x, w + 14));
+-            g.drawString(this.font, c, x + 7, 10, act ? 0xFFFFFFFF : (hot ? TEXT : DIM), false);
++            com.rrm.mobslearn.client.Ui.text(g, this.font, c, x + 7, 10, act ? 0xFFFFFFFF : (hot ? TEXT : DIM), false);
+             if (act) {
+                 float tx = x + 7, tw = w;
+                 if (navUnderX < 0) {
+@@ -397,18 +397,18 @@
+     }
+ 
+     void text(GuiGraphics g, Component c, int x, int y, int color, float alpha) {
+-        g.drawString(this.font, c, x, y, a(color, alpha), false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, c, x, y, a(color, alpha), false);
+     }
+ 
+     void textCentered(GuiGraphics g, Component c, int cx, int y, int color, float alpha) {
+-        g.drawString(this.font, c, cx - this.font.width(c) / 2, y, a(color, alpha), false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, c, cx - this.font.width(c) / 2, y, a(color, alpha), false);
+     }
+ 
+     int paragraph(GuiGraphics g, Component c, int x, int y, int w, int color, float alpha, boolean center) {
+         for (FormattedCharSequence line : this.font.split(c, w)) {
+             if (g != null) {
+                 int lx = center ? x + (w - this.font.width(line)) / 2 : x;
+-                g.drawString(this.font, line, lx, y, a(color, alpha), false);
++                com.rrm.mobslearn.client.Ui.text(g, this.font, line, lx, y, a(color, alpha), false);
+             }
+             y += 11;
+         }
+@@ -424,7 +424,7 @@
+         g.pose().translate(x, y, 0);
+         g.pose().scale(scale, scale, 1);
+         int dx = center ? -this.font.width(c) / 2 : 0;
+-        g.drawString(this.font, c, dx, 0, a(color, alpha), false);
++        com.rrm.mobslearn.client.Ui.text(g, this.font, c, dx, 0, a(color, alpha), false);
+         g.pose().popPose();
+     }
+ 
+@@ -473,16 +473,8 @@
+                 var resource = this.minecraft.getResourceManager().getResource(ident);
+                 if (resource.isEmpty()) continue;
+                 try (var input = resource.get().open(); var image = com.mojang.blaze3d.platform.NativeImage.read(input)) {
+-                    var animation = resource.get().metadata().getSection(net.minecraft.client.resources.metadata.animation.AnimationMetadataSection.SERIALIZER);
+-                    if (animation.isEmpty()) return java.util.Optional.of(new IconTexture(ident, 0f, 1f, 0f, 1f));
+-                    var metadata = animation.get();
+-                    var size = metadata.calculateFrameSize(image.getWidth(), image.getHeight());
+-                    int columns = Math.max(1, image.getWidth() / size.width());
+-                    int first = metadata.frames().filter(frames -> !frames.isEmpty()).map(frames -> frames.get(0).index()).orElse(0);
+-                    float u0 = (first % columns) * size.width() / (float) image.getWidth();
+-                    float v0 = (first / columns) * size.height() / (float) image.getHeight();
+-                    return java.util.Optional.of(new IconTexture(ident, u0, u0 + size.width() / (float) image.getWidth(),
+-                        v0, v0 + size.height() / (float) image.getHeight()));
++                    if (image.getHeight() <= image.getWidth()) return java.util.Optional.of(new IconTexture(ident, 0f, 1f, 0f, 1f));
++                    return java.util.Optional.of(new IconTexture(ident, 0f, 1f, 0f, image.getWidth() / (float) image.getHeight()));
+                 } catch (Exception ignored) {
+                 }
+             }
+@@ -1379,9 +1371,9 @@
+                 Ui.border(g, nx - 4, ly - 4, 9, 9, a(c, alpha));
+                 if (done) g.fill(nx - 2, ly - 2, nx + 3, ly + 3, a(GOLD, alpha));
+                 String roman = i == 0 ? "I" : i == 1 ? "II" : "III";
+-                g.drawString(font, roman, nx - font.width(roman) / 2, y - 3, a(done ? GOLD : FAINT, alpha), false);
++                com.rrm.mobslearn.client.Ui.text(g, font, roman, nx - font.width(roman) / 2, y - 3, a(done ? GOLD : FAINT, alpha), false);
+                 String need = world ? s.thresholds()[i] + "%" : "×" + s.thresholds()[i];
+-                g.drawString(font, need, nx - font.width(need) / 2, ly + 8, a(done ? 0xFFE8D9A8 : DIM, alpha), false);
++                com.rrm.mobslearn.client.Ui.text(g, font, need, nx - font.width(need) / 2, ly + 8, a(done ? 0xFFE8D9A8 : DIM, alpha), false);
+             }
+         }
+ 
+diff -ruN a/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java b/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java
+--- a/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java	2026-10-28 19:44:35.814030777 +0000
++++ b/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java	2026-10-28 19:44:36.091517582 +0000
+@@ -59,7 +59,7 @@
+                 knowledge.readJson(json);
+             }
+         } catch (Exception e) { MobsLearn.LOG.error("[MobsLearn] Failed to read knowledge", e); }
+-        knowledge.enabled = MobsLearnRules.get(s.getGameRules());
++        knowledge.enabled = MobsLearnRules.get(s.getWorldData().getGameRules());
+         MobsLearn.LOG.info("[MobsLearn] World intelligence: {}%, enabled: {}", knowledge.intelligence(), knowledge.enabled);
+     }
+     public static void stop() { save(); server = null; travelers.clear(); Learning.reset(); }
+@@ -129,7 +129,7 @@
+         knowledge.absurd = settings.absurd(); knowledge.combat = settings.combat();
+         knowledge.difficulty = Math.max(0, Math.min(2, settings.difficulty())); knowledge.enabled = settings.enabled();
+         com.rrm.mobslearn.mob.Colonies.setWarp(settings.warp());
+-        MobsLearnRules.set(server.getGameRules(), knowledge.enabled, server);
++        MobsLearnRules.set(server.getWorldData().getGameRules(), knowledge.enabled, server);
+         com.rrm.mobslearn.mob.Behaviors.reset();
+         for (ServerLevel level : server.getAllLevels()) Traits.refreshSettings(level);
+         save(); syncAll();
+@@ -192,7 +192,7 @@
+         if (server == null) return;
+         ticks++;
+         if (ticks % 20 == 0) {
+-            boolean enabled = MobsLearnRules.get(server.getGameRules());
++            boolean enabled = MobsLearnRules.get(server.getWorldData().getGameRules());
+             if (enabled != knowledge.enabled) {
+                 knowledge.enabled = enabled;
+                 com.rrm.mobslearn.mob.Behaviors.reset();
+diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Behaviors.java b/src/main/java/com/rrm/mobslearn/mob/Behaviors.java
+--- a/src/main/java/com/rrm/mobslearn/mob/Behaviors.java	2026-10-28 19:44:35.930365241 +0000
++++ b/src/main/java/com/rrm/mobslearn/mob/Behaviors.java	2026-10-28 19:44:36.093056067 +0000
+@@ -14,7 +14,6 @@
+ import java.util.Set;
+ import java.util.UUID;
+ import net.minecraft.core.BlockPos;
+-import net.minecraft.core.component.DataComponents;
+ import net.minecraft.core.particles.ParticleTypes;
+ import net.minecraft.network.chat.Component;
+ import net.minecraft.network.chat.PlayerChatMessage;
+@@ -44,8 +43,6 @@
+ import net.minecraft.world.item.BlockItem;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.Items;
+-import net.minecraft.world.item.component.FireworkExplosion;
+-import net.minecraft.world.item.component.Fireworks;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.GameRules;
+@@ -230,7 +227,7 @@
+                     && mob.distanceTo(targetPlayer) > 3 && r.nextFloat() < 0.04f * lvl) {
+                     Vec3 look = targetPlayer.getLookAngle();
+                     Vec3 dest = targetPlayer.position().subtract(look.x * 2, 0, look.z * 2);
+-                    ((EnderMan) mob).teleport(dest.x, dest.y, dest.z);
++                    ((EnderMan) mob).randomTeleport(dest.x, dest.y, dest.z, true);
+                 }
+             }
+             case COW -> {
+@@ -460,7 +457,7 @@
+             later(8, () -> {
+                 if (!en.isAlive() || !p.isAlive()) return;
+                 Vec3 look = p.getLookAngle();
+-                if (en.teleport(p.getX() - look.x * 1.6, p.getY(), p.getZ() - look.z * 1.6)) {
++                if (en.randomTeleport(p.getX() - look.x * 1.6, p.getY(), p.getZ() - look.z * 1.6, true)) {
+                     later(6, () -> {
+                         if (en.isAlive() && p.isAlive() && en.distanceTo(p) < 3.5) Combat.critHit(level, en, p, 1.15);
+                     });
+@@ -552,9 +549,17 @@
+         int[] palette = {0xFF5A5A, 0xFFD25A, 0x8BE03A, 0x5FD1FF, 0xB46CFF, 0xFF7AD9};
+         for (int i = 0; i < lvl; i++) {
+             ItemStack rocket = new ItemStack(Items.FIREWORK_ROCKET);
+-            FireworkExplosion.Shape shape = FireworkExplosion.Shape.values()[r.nextInt(FireworkExplosion.Shape.values().length)];
+-            rocket.set(DataComponents.FIREWORKS, new Fireworks(1, List.of(new FireworkExplosion(shape,
+-                IntArrayList.of(palette[r.nextInt(palette.length)], palette[r.nextInt(palette.length)]), IntArrayList.of(0xFFFFFF), true, true))));
++            net.minecraft.nbt.CompoundTag ex = new net.minecraft.nbt.CompoundTag();
++            ex.putByte("Type", (byte) r.nextInt(5));
++            ex.putIntArray("Colors", new int[]{palette[r.nextInt(palette.length)], palette[r.nextInt(palette.length)]});
++            ex.putIntArray("FadeColors", new int[]{0xFFFFFF});
++            ex.putBoolean("Trail", true);
++            ex.putBoolean("Flicker", true);
++            net.minecraft.nbt.ListTag explosions = new net.minecraft.nbt.ListTag();
++            explosions.add(ex);
++            net.minecraft.nbt.CompoundTag fwTag = rocket.getOrCreateTagElement("Fireworks");
++            fwTag.put("Explosions", explosions);
++            fwTag.putByte("Flight", (byte) 1);
+             FireworkRocketEntity fw = new FireworkRocketEntity(level, c.getX(), c.getY() + 0.5, c.getZ(), rocket);
+             level.addFreshEntity(fw);
+         }
+diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Colonies.java b/src/main/java/com/rrm/mobslearn/mob/Colonies.java
+--- a/src/main/java/com/rrm/mobslearn/mob/Colonies.java	2026-10-28 19:44:35.892515045 +0000
++++ b/src/main/java/com/rrm/mobslearn/mob/Colonies.java	2026-10-28 19:44:36.093120101 +0000
+@@ -23,7 +23,6 @@
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.GlobalPos;
+ import net.minecraft.core.Holder;
+-import net.minecraft.core.component.DataComponents;
+ import net.minecraft.core.particles.ParticleTypes;
+ import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.network.chat.Component;
+@@ -53,7 +52,6 @@
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.Items;
+ import net.minecraft.world.phys.Vec3;
+-import net.minecraft.world.item.component.MapDecorations;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.CampfireBlock;
+@@ -61,8 +59,6 @@
+ import net.minecraft.world.level.block.WallTorchBlock;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.levelgen.Heightmap;
+-import net.minecraft.world.level.saveddata.maps.MapDecorationType;
+-import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
+ import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+ import net.minecraft.world.level.storage.LevelResource;
+ import net.minecraft.world.phys.AABB;
+@@ -2270,14 +2266,21 @@
+             for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
+                 ItemStack stack = p.getInventory().getItem(i);
+                 if (!stack.is(Items.FILLED_MAP)) continue;
+-                MapDecorations existing = stack.getOrDefault(DataComponents.MAP_DECORATIONS, MapDecorations.EMPTY);
++                net.minecraft.nbt.CompoundTag tag = stack.getTag();
+                 for (Colony c : colonies) {
+                     if (c.pending || !c.dim.equals(dim) || !c.known.contains(p.getUUID().toString()) || p.distanceToSqr(c.x, c.y, c.z) > 2048.0 * 2048.0) continue;
+-                    Holder<MapDecorationType> type = c.kind.equals("village") ? MapDecorationTypes.PLAINS_VILLAGE
+-                        : c.active() ? MapDecorationTypes.RED_X : MapDecorationTypes.TARGET_POINT;
++                    net.minecraft.world.level.saveddata.maps.MapDecoration.Type type = c.kind.equals("village") ? net.minecraft.world.level.saveddata.maps.MapDecoration.Type.BLUE_MARKER
++                        : c.active() ? net.minecraft.world.level.saveddata.maps.MapDecoration.Type.RED_X : net.minecraft.world.level.saveddata.maps.MapDecoration.Type.TARGET_POINT;
+                     String key = "mobslearn_" + c.id;
+-                    MapDecorations.Entry e = existing.decorations().get(key);
+-                    if (e != null && e.type().equals(type)) continue;
++                    boolean have = false;
++                    if (tag != null && tag.contains("Decorations", 9)) {
++                        net.minecraft.nbt.ListTag list = tag.getList("Decorations", 10);
++                        for (int k = 0; k < list.size(); k++) {
++                            net.minecraft.nbt.CompoundTag d = list.getCompound(k);
++                            if (d.getString("id").equals(key) && d.getByte("type") == type.getIcon()) have = true;
++                        }
++                    }
++                    if (have) continue;
+                     MapItemSavedData.addTargetDecoration(stack, c.center(), key, type);
+                 }
+             }
+diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Combat.java b/src/main/java/com/rrm/mobslearn/mob/Combat.java
+--- a/src/main/java/com/rrm/mobslearn/mob/Combat.java	2026-10-28 19:44:35.957711295 +0000
++++ b/src/main/java/com/rrm/mobslearn/mob/Combat.java	2026-10-28 19:44:36.093243693 +0000
+@@ -113,7 +113,7 @@
+             mob.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 50 + 10 * lvl, lvl >= 3 ? 1 : 0));
+             if (mob instanceof EnderMan en) {
+                 for (int i = 0; i < 8; i++) {
+-                    if (en.teleport(mob.getX() + (r.nextDouble() - 0.5) * 32, mob.getY() + r.nextInt(9) - 4, mob.getZ() + (r.nextDouble() - 0.5) * 32)) break;
++                    if (en.randomTeleport(mob.getX() + (r.nextDouble() - 0.5) * 32, mob.getY() + r.nextInt(9) - 4, mob.getZ() + (r.nextDouble() - 0.5) * 32, true)) break;
+                 }
+             }
+         }
+diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Compat.java b/src/main/java/com/rrm/mobslearn/mob/Compat.java
+--- a/src/main/java/com/rrm/mobslearn/mob/Compat.java	1970-01-01 00:00:00.000000000 +0000
++++ b/src/main/java/com/rrm/mobslearn/mob/Compat.java	2026-10-28 19:44:36.092465543 +0000
+@@ -0,0 +1,31 @@
++package com.rrm.mobslearn.mob;
++
++import java.nio.charset.StandardCharsets;
++import java.util.UUID;
++import net.minecraft.resources.ResourceLocation;
++import net.minecraft.world.entity.EquipmentSlot;
++import net.minecraft.world.entity.Mob;
++import net.minecraft.world.entity.ai.attributes.AttributeInstance;
++import net.minecraft.world.entity.ai.attributes.AttributeModifier;
++
++public final class Compat {
++    private Compat() {
++    }
++
++    public static float dropChance(Mob mob, EquipmentSlot slot) {
++        return 0.085f;
++    }
++
++    public static UUID uuid(ResourceLocation id) {
++        return UUID.nameUUIDFromBytes(id.toString().getBytes(StandardCharsets.UTF_8));
++    }
++
++    public static AttributeModifier mod(ResourceLocation id, double value, AttributeModifier.Operation op) {
++        return new AttributeModifier(uuid(id), id.toString(), value, op);
++    }
++
++    public static void addOrUpdate(AttributeInstance inst, AttributeModifier m) {
++        inst.removeModifier(m.getId());
++        inst.addTransientModifier(m);
++    }
++}
+diff -ruN a/src/main/java/com/rrm/mobslearn/net/Net.java b/src/main/java/com/rrm/mobslearn/net/Net.java
+--- a/src/main/java/com/rrm/mobslearn/net/Net.java	2026-10-28 19:44:35.796108054 +0000
++++ b/src/main/java/com/rrm/mobslearn/net/Net.java	2026-10-28 19:44:36.093363973 +0000
+@@ -1,138 +1,217 @@
+ package com.rrm.mobslearn.net;
+ 
+ import com.rrm.mobslearn.MobsLearn;
+-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+-import net.minecraft.network.RegistryFriendlyByteBuf;
+-import net.minecraft.network.codec.ByteBufCodecs;
+-import net.minecraft.network.codec.StreamCodec;
+-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
++import net.minecraft.network.FriendlyByteBuf;
+ 
+ public final class Net {
+     private Net() {
+     }
+ 
+-    public record SyncPayload(String json) implements CustomPacketPayload {
+-        public static final Type<SyncPayload> TYPE = new Type<>(MobsLearn.id("sync"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, SyncPayload> CODEC =
+-            StreamCodec.composite(ByteBufCodecs.STRING_UTF8, SyncPayload::json, SyncPayload::new);
++    public interface Payload {
++        void write(FriendlyByteBuf buf);
++
++        PType<?> ptype();
++    }
++
++    public record PType<T extends Payload>(net.minecraft.resources.ResourceLocation id, java.util.function.Function<FriendlyByteBuf, T> reader) {
++    }
++
++    public record SyncPayload(String json) implements Payload {
++        public static final PType<SyncPayload> TYPE = new PType<>(MobsLearn.id("sync"), buf -> new SyncPayload(buf.readUtf(1 << 20)));
+ 
+         @Override
+-        public Type<? extends CustomPacketPayload> type() {
++        public void write(FriendlyByteBuf buf) {
++            buf.writeUtf(json, 1 << 20);
++        }
++
++        @Override
++        public PType<?> ptype() {
+             return TYPE;
+         }
+     }
+ 
+-    public record LearnPayload(String skill, int level) implements CustomPacketPayload {
+-        public static final Type<LearnPayload> TYPE = new Type<>(MobsLearn.id("learn"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, LearnPayload> CODEC =
+-            StreamCodec.composite(ByteBufCodecs.STRING_UTF8, LearnPayload::skill, ByteBufCodecs.VAR_INT, LearnPayload::level, LearnPayload::new);
++    public record LearnPayload(String skill, int level) implements Payload {
++        public static final PType<LearnPayload> TYPE = new PType<>(MobsLearn.id("learn"), buf -> new LearnPayload(buf.readUtf(1 << 20), buf.readVarInt()));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeUtf(skill, 1 << 20);
++            buf.writeVarInt(level);
++        }
+ 
+         @Override
+-        public Type<? extends CustomPacketPayload> type() {
++        public PType<?> ptype() {
+             return TYPE;
+         }
+     }
+ 
+-    public record AskPayload(int villager, String topic, String options) implements CustomPacketPayload {
+-        public static final Type<AskPayload> TYPE = new Type<>(MobsLearn.id("ask"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, AskPayload> CODEC = StreamCodec.composite(
+-            ByteBufCodecs.VAR_INT, AskPayload::villager, ByteBufCodecs.STRING_UTF8, AskPayload::topic, ByteBufCodecs.STRING_UTF8, AskPayload::options, AskPayload::new);
+-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
++    public record AskPayload(int villager, String topic, String options) implements Payload {
++        public static final PType<AskPayload> TYPE = new PType<>(MobsLearn.id("ask"), buf -> new AskPayload(buf.readVarInt(), buf.readUtf(1 << 20), buf.readUtf(1 << 20)));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeVarInt(villager);
++            buf.writeUtf(topic, 1 << 20);
++            buf.writeUtf(options, 1 << 20);
++        }
++
++        @Override
++        public PType<?> ptype() {
++            return TYPE;
++        }
+     }
+ 
+-    public record AnswerPayload(int villager, int choice) implements CustomPacketPayload {
+-        public static final Type<AnswerPayload> TYPE = new Type<>(MobsLearn.id("answer"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, AnswerPayload> CODEC = StreamCodec.composite(
+-            ByteBufCodecs.VAR_INT, AnswerPayload::villager, ByteBufCodecs.VAR_INT, AnswerPayload::choice, AnswerPayload::new);
+-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
++    public record AnswerPayload(int villager, int choice) implements Payload {
++        public static final PType<AnswerPayload> TYPE = new PType<>(MobsLearn.id("answer"), buf -> new AnswerPayload(buf.readVarInt(), buf.readVarInt()));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeVarInt(villager);
++            buf.writeVarInt(choice);
++        }
++
++        @Override
++        public PType<?> ptype() {
++            return TYPE;
++        }
+     }
+ 
+-    public record ResultPayload(boolean correct, String topic) implements CustomPacketPayload {
+-        public static final Type<ResultPayload> TYPE = new Type<>(MobsLearn.id("result"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, ResultPayload> CODEC = StreamCodec.composite(
+-            ByteBufCodecs.BOOL, ResultPayload::correct, ByteBufCodecs.STRING_UTF8, ResultPayload::topic, ResultPayload::new);
+-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
++    public record ResultPayload(boolean correct, String topic) implements Payload {
++        public static final PType<ResultPayload> TYPE = new PType<>(MobsLearn.id("result"), buf -> new ResultPayload(buf.readBoolean(), buf.readUtf(1 << 20)));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeBoolean(correct);
++            buf.writeUtf(topic, 1 << 20);
++        }
++
++        @Override
++        public PType<?> ptype() {
++            return TYPE;
++        }
+     }
+ 
+-    public record TradeOpenPayload(int chief, String kind, String offers) implements CustomPacketPayload {
+-        public static final Type<TradeOpenPayload> TYPE = new Type<>(MobsLearn.id("trade_open"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, TradeOpenPayload> CODEC = StreamCodec.composite(
+-            ByteBufCodecs.VAR_INT, TradeOpenPayload::chief, ByteBufCodecs.STRING_UTF8, TradeOpenPayload::kind,
+-            ByteBufCodecs.STRING_UTF8, TradeOpenPayload::offers, TradeOpenPayload::new);
+-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
++    public record TradeOpenPayload(int chief, String kind, String offers) implements Payload {
++        public static final PType<TradeOpenPayload> TYPE = new PType<>(MobsLearn.id("trade_open"), buf -> new TradeOpenPayload(buf.readVarInt(), buf.readUtf(1 << 20), buf.readUtf(1 << 20)));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeVarInt(chief);
++            buf.writeUtf(kind, 1 << 20);
++            buf.writeUtf(offers, 1 << 20);
++        }
++
++        @Override
++        public PType<?> ptype() {
++            return TYPE;
++        }
+     }
+ 
+-    public record TradePayload(int chief, int offer) implements CustomPacketPayload {
+-        public static final Type<TradePayload> TYPE = new Type<>(MobsLearn.id("trade"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, TradePayload> CODEC = StreamCodec.composite(
+-            ByteBufCodecs.VAR_INT, TradePayload::chief, ByteBufCodecs.VAR_INT, TradePayload::offer, TradePayload::new);
+-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
++    public record TradePayload(int chief, int offer) implements Payload {
++        public static final PType<TradePayload> TYPE = new PType<>(MobsLearn.id("trade"), buf -> new TradePayload(buf.readVarInt(), buf.readVarInt()));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeVarInt(chief);
++            buf.writeVarInt(offer);
++        }
++
++        @Override
++        public PType<?> ptype() {
++            return TYPE;
++        }
+     }
+ 
+-    public record ColoniesRequestPayload(int dummy) implements CustomPacketPayload {
+-        public static final Type<ColoniesRequestPayload> TYPE = new Type<>(MobsLearn.id("colonies_request"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, ColoniesRequestPayload> CODEC = StreamCodec.composite(
+-            ByteBufCodecs.VAR_INT, ColoniesRequestPayload::dummy, ColoniesRequestPayload::new);
+-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
++    public record ColoniesRequestPayload(int dummy) implements Payload {
++        public static final PType<ColoniesRequestPayload> TYPE = new PType<>(MobsLearn.id("colonies_request"), buf -> new ColoniesRequestPayload(buf.readVarInt()));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeVarInt(dummy);
++        }
++
++        @Override
++        public PType<?> ptype() {
++            return TYPE;
++        }
+     }
+ 
+-    public record ForgetPayload(String id) implements CustomPacketPayload {
+-        public static final Type<ForgetPayload> TYPE = new Type<>(MobsLearn.id("forget"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, ForgetPayload> CODEC = StreamCodec.composite(
+-            ByteBufCodecs.STRING_UTF8, ForgetPayload::id, ForgetPayload::new);
+-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
++    public record ForgetPayload(String id) implements Payload {
++        public static final PType<ForgetPayload> TYPE = new PType<>(MobsLearn.id("forget"), buf -> new ForgetPayload(buf.readUtf(1 << 20)));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeUtf(id, 1 << 20);
++        }
++
++        @Override
++        public PType<?> ptype() {
++            return TYPE;
++        }
++    }
++
++    public record ColoniesPayload(String json) implements Payload {
++        public static final PType<ColoniesPayload> TYPE = new PType<>(MobsLearn.id("colonies"), buf -> new ColoniesPayload(buf.readUtf(1 << 20)));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeUtf(json, 1 << 20);
++        }
++
++        @Override
++        public PType<?> ptype() {
++            return TYPE;
++        }
+     }
+ 
+-    public record ColoniesPayload(String json) implements CustomPacketPayload {
+-        public static final Type<ColoniesPayload> TYPE = new Type<>(MobsLearn.id("colonies"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, ColoniesPayload> CODEC = StreamCodec.composite(
+-            ByteBufCodecs.STRING_UTF8, ColoniesPayload::json, ColoniesPayload::new);
+-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
++    public record NoticePayload(net.minecraft.network.chat.Component text) implements Payload {
++        public static final PType<NoticePayload> TYPE = new PType<>(MobsLearn.id("notice"), buf -> new NoticePayload(buf.readComponent()));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeComponent(text);
++        }
++
++        @Override
++        public PType<?> ptype() {
++            return TYPE;
++        }
+     }
+ 
+-    public record NoticePayload(net.minecraft.network.chat.Component text) implements CustomPacketPayload {
+-        public static final Type<NoticePayload> TYPE = new Type<>(MobsLearn.id("notice"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, NoticePayload> CODEC = StreamCodec.composite(
+-            net.minecraft.network.chat.ComponentSerialization.STREAM_CODEC, NoticePayload::text, NoticePayload::new);
+-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
++    public record SettingsPayload(double speed, boolean absurd, boolean combat, int difficulty, boolean enabled, int warp) implements Payload {
++        public static final PType<SettingsPayload> TYPE = new PType<>(MobsLearn.id("settings"), buf -> new SettingsPayload(buf.readDouble(), buf.readBoolean(), buf.readBoolean(), buf.readVarInt(), buf.readBoolean(), buf.readVarInt()));
++
++        @Override
++        public void write(FriendlyByteBuf buf) {
++            buf.writeDouble(speed);
++            buf.writeBoolean(absurd);
++            buf.writeBoolean(combat);
++            buf.writeVarInt(difficulty);
++            buf.writeBoolean(enabled);
++            buf.writeVarInt(warp);
++        }
++
++        @Override
++        public PType<?> ptype() {
++            return TYPE;
++        }
+     }
+ 
+     public static void notice(net.minecraft.server.level.ServerPlayer player, net.minecraft.network.chat.Component text) {
+-        if (com.rrm.mobslearn.net.SNet.canSend(player, NoticePayload.TYPE)) com.rrm.mobslearn.net.SNet.send(player, new NoticePayload(text));
++        if (SNet.canSend(player, NoticePayload.TYPE)) SNet.send(player, new NoticePayload(text));
+         else player.displayClientMessage(text, true);
+     }
+ 
+     public static void register() {
+-        PayloadTypeRegistry.playS2C().register(NoticePayload.TYPE, NoticePayload.CODEC);
+-        PayloadTypeRegistry.playS2C().register(AskPayload.TYPE, AskPayload.CODEC);
+-        PayloadTypeRegistry.playS2C().register(ResultPayload.TYPE, ResultPayload.CODEC);
+-        PayloadTypeRegistry.playS2C().register(TradeOpenPayload.TYPE, TradeOpenPayload.CODEC);
+-        PayloadTypeRegistry.playS2C().register(ColoniesPayload.TYPE, ColoniesPayload.CODEC);
+-        PayloadTypeRegistry.playC2S().register(AnswerPayload.TYPE, AnswerPayload.CODEC);
+-        PayloadTypeRegistry.playC2S().register(TradePayload.TYPE, TradePayload.CODEC);
+-        PayloadTypeRegistry.playC2S().register(ColoniesRequestPayload.TYPE, ColoniesRequestPayload.CODEC);
+-        PayloadTypeRegistry.playC2S().register(ForgetPayload.TYPE, ForgetPayload.CODEC);
+-        com.rrm.mobslearn.net.SNet.registerGlobalReceiver(ForgetPayload.TYPE, (payload, context) ->
++        SNet.registerGlobalReceiver(ForgetPayload.TYPE, (payload, context) ->
+             context.server().execute(() -> com.rrm.mobslearn.mob.Colonies.forget(context.player(), payload.id())));
+-        com.rrm.mobslearn.net.SNet.registerGlobalReceiver(AnswerPayload.TYPE, (payload, context) ->
++        SNet.registerGlobalReceiver(AnswerPayload.TYPE, (payload, context) ->
+             context.server().execute(() -> com.rrm.mobslearn.mob.VillageDefense.answer(context.player(), payload.villager(), payload.choice())));
+-        com.rrm.mobslearn.net.SNet.registerGlobalReceiver(TradePayload.TYPE, (payload, context) ->
++        SNet.registerGlobalReceiver(TradePayload.TYPE, (payload, context) ->
+             context.server().execute(() -> com.rrm.mobslearn.mob.Colonies.trade(context.player(), payload.chief(), payload.offer())));
+-        com.rrm.mobslearn.net.SNet.registerGlobalReceiver(ColoniesRequestPayload.TYPE, (payload, context) ->
++        SNet.registerGlobalReceiver(ColoniesRequestPayload.TYPE, (payload, context) ->
+             context.server().execute(() -> com.rrm.mobslearn.mob.Colonies.sendList(context.player())));
+-        PayloadTypeRegistry.playS2C().register(SyncPayload.TYPE, SyncPayload.CODEC);
+-        PayloadTypeRegistry.playS2C().register(LearnPayload.TYPE, LearnPayload.CODEC);
+-        PayloadTypeRegistry.playC2S().register(SettingsPayload.TYPE, SettingsPayload.CODEC);
+-        com.rrm.mobslearn.net.SNet.registerGlobalReceiver(SettingsPayload.TYPE, (payload, context) ->
++        SNet.registerGlobalReceiver(SettingsPayload.TYPE, (payload, context) ->
+             context.server().execute(() -> com.rrm.mobslearn.learn.WorldBrain.configure(context.player(), payload)));
+     }
+-
+-    public record SettingsPayload(double speed, boolean absurd, boolean combat, int difficulty, boolean enabled, int warp) implements CustomPacketPayload {
+-        public static final Type<SettingsPayload> TYPE = new Type<>(MobsLearn.id("settings"));
+-        public static final StreamCodec<RegistryFriendlyByteBuf, SettingsPayload> CODEC = StreamCodec.composite(
+-            ByteBufCodecs.DOUBLE, SettingsPayload::speed, ByteBufCodecs.BOOL, SettingsPayload::absurd,
+-            ByteBufCodecs.BOOL, SettingsPayload::combat, ByteBufCodecs.VAR_INT, SettingsPayload::difficulty,
+-            ByteBufCodecs.BOOL, SettingsPayload::enabled, ByteBufCodecs.VAR_INT, SettingsPayload::warp, SettingsPayload::new);
+-        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+-    }
+ }
+diff -ruN a/src/main/java/com/rrm/mobslearn/net/SNet.java b/src/main/java/com/rrm/mobslearn/net/SNet.java
+--- a/src/main/java/com/rrm/mobslearn/net/SNet.java	1970-01-01 00:00:00.000000000 +0000
++++ b/src/main/java/com/rrm/mobslearn/net/SNet.java	2026-10-28 19:44:36.093428564 +0000
+@@ -0,0 +1,33 @@
++package com.rrm.mobslearn.net;
++
++import java.util.function.BiConsumer;
++import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
++import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++
++public final class SNet {
++    private SNet() {
++    }
++
++    public record Context(MinecraftServer server, ServerPlayer player) {
++    }
++
++    public static boolean canSend(ServerPlayer player, Net.PType<?> type) {
++        return ServerPlayNetworking.canSend(player, type.id());
++    }
++
++    public static void send(ServerPlayer player, Net.Payload payload) {
++        FriendlyByteBuf buf = PacketByteBufs.create();
++        payload.write(buf);
++        ServerPlayNetworking.send(player, payload.ptype().id(), buf);
++    }
++
++    public static <T extends Net.Payload> void registerGlobalReceiver(Net.PType<T> type, BiConsumer<T, Context> handler) {
++        ServerPlayNetworking.registerGlobalReceiver(type.id(), (server, player, net, buf, sender) -> {
++            T value = type.reader().apply(buf);
++            handler.accept(value, new Context(server, player));
++        });
++    }
++}
+diff -ruN a/src/main/resources/mobslearn.client.mixins.json b/src/main/resources/mobslearn.client.mixins.json
+--- a/src/main/resources/mobslearn.client.mixins.json	2026-10-28 19:44:35.107800118 +0000
++++ b/src/main/resources/mobslearn.client.mixins.json	2026-10-28 19:44:36.105304963 +0000
+@@ -2,7 +2,12 @@
+   "required": true,
+   "minVersion": "0.8",
+   "package": "com.rrm.mobslearn.client.mixin",
+-  "compatibilityLevel": "JAVA_25",
+-  "client": ["CreateWorldGameTabMixin", "LanguageManagerMixin", "ZombieModelMixin"],
+-  "injectors": {"defaultRequire": 1}
+-}
++  "compatibilityLevel": "JAVA_17",
++  "client": [
++    "CreateWorldGameTabMixin",
++    "LanguageManagerMixin"
++  ],
++  "injectors": {
++    "defaultRequire": 1
++  }
++}
+\ No newline at end of file
+diff -ruN a/src/main/resources/mobslearn.mixins.json b/src/main/resources/mobslearn.mixins.json
+--- a/src/main/resources/mobslearn.mixins.json	2026-10-28 19:44:35.107815407 +0000
++++ b/src/main/resources/mobslearn.mixins.json	2026-10-28 19:44:36.093589322 +0000
+@@ -2,7 +2,7 @@
+   "required": true,
+   "minVersion": "0.8",
+   "package": "com.rrm.mobslearn.mixin",
+-  "compatibilityLevel": "JAVA_25",
++  "compatibilityLevel": "JAVA_17",
+   "mixins": [
+     "CreeperAccessor",
+     "EndermanMixin"
+@@ -10,4 +10,4 @@
+   "injectors": {
+     "defaultRequire": 1
+   }
+-}
++}
+\ No newline at end of file
