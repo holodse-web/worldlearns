@@ -85,15 +85,12 @@ See [`source/BUILD.md`](source/BUILD.md). Older-version source snapshots and the
 - `source/src/` — main Java source and resources for Minecraft 26.3.
 - `source/tools/` — existing language, icon-generation and porting tools.
 - `versions/source-*/src/` — source snapshots for older Minecraft versions.
-- [`docs/SHORT_DESCRIPTIONS.md`](docs/SHORT_DESCRIPTIONS.md) — short Russian and English descriptions.
-- [`docs/MODRINTH_DESCRIPTION.md`](docs/MODRINTH_DESCRIPTION.md) — English Markdown project description.
-- [`docs/MODRINTH_PUBLICATION_NOTES_RU.md`](docs/MODRINTH_PUBLICATION_NOTES_RU.md) — publication settings and rules reviewed on 28 October 2026.
 
-Build outputs, Minecraft and dependency JARs, caches, backups, runtime configuration, logs and worlds are excluded. This repository is private while publication materials are prepared.
+Build outputs, Minecraft and dependency JARs, caches, backups, runtime configuration, logs and worlds are excluded. This repository is private.
 
 ## Validation and bug reports
 
-The descriptions and requirement table were checked against source code and metadata. Preparing this repository did not include a new build, a game launch or a dedicated-server test. Runtime compatibility and save migration still need player testing.
+Runtime compatibility, dedicated-server behavior and save migration still need in-game testing.
 
 Report the game/mod/Loader/API versions, steps to reproduce, installed mods and relevant logs. Remove keys, chat content and other private data before sharing.
 

@@ -35,8 +35,13 @@
 *.p12
 *.pfx
 
-# Local compatibility report and editor/OS state
+# Local publication materials and compatibility report
+/docs/MODRINTH_DESCRIPTION.md
+/docs/MODRINTH_PUBLICATION_NOTES_RU.md
+/docs/SHORT_DESCRIPTIONS.md
 /source/COMPATIBILITY.md
+
+# Editor/OS state
 .idea/
 .vscode/
 .DS_Store
