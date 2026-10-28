@@ -40,6 +40,8 @@
 /docs/MODRINTH_PUBLICATION_NOTES_RU.md
 /docs/SHORT_DESCRIPTIONS.md
 /source/COMPATIBILITY.md
+/source/BUILD.md
+/source/CHANGES-beta.md
 
 # Editor/OS state
 .idea/

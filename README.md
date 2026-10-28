@@ -78,7 +78,7 @@ If `JAVA_HOME` or `javac.exe` on `PATH` already points to the correct JDK, omit 
 
 Output: `source/build/libs/mobslearn-<version>.jar`. Distribution filenames use `worldlearns-<version>.jar`; the metadata identifies the mod in either case. Dependencies are not bundled in the mod JAR.
 
-See [`source/BUILD.md`](source/BUILD.md). Older-version source snapshots and the original porting tools are included. The shell build/port scripts depend on their original development environment and local dependency archives, which are excluded from this repository; they are not portable build instructions for a fresh clone.
+Older-version source snapshots and the original porting tools are included. The shell build/port scripts depend on their original development environment and local dependency archives, which are excluded from this repository; they are not portable build instructions for a fresh clone.
 
 ## Repository contents
 
