@@ -86,7 +86,7 @@ Older-version source snapshots and the original porting tools are included. The 
 - `source/tools/` — existing language, icon-generation and porting tools.
 - `versions/source-*/src/` — source snapshots for older Minecraft versions.
 
-Build outputs, Minecraft and dependency JARs, caches, backups, runtime configuration, logs and worlds are excluded. This repository is private.
+Build outputs, Minecraft and dependency JARs, caches, backups, runtime configuration, logs and worlds are excluded.
 
 ## Validation and bug reports
 
