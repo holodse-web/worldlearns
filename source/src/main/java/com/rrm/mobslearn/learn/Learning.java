@@ -70,6 +70,7 @@ public final class Learning {
         if (src.is(DamageTypeTags.IS_PROJECTILE)) WorldBrain.teach(Trigger.KILL_PROJECTILE, g, 1, level, e.blockPosition());
         if (level.isBrightOutside()) WorldBrain.teach(Trigger.KILL_DAY, g, 1, level, e.blockPosition());
         if (e.isInWater() || p.isInWater()) WorldBrain.teach(Trigger.KILL_IN_WATER, g, 1, level, e.blockPosition());
+        if (!level.canSeeSky(e.blockPosition()) && e.getY() < level.getSeaLevel()) WorldBrain.teach(Trigger.KILL_UNDERGROUND, g, 1, level, e.blockPosition());
     }
 
     public static void onDamage(LivingEntity e, DamageSource src) {
@@ -151,7 +152,8 @@ public final class Learning {
             Behaviors.later(1, () -> {
                 if (!level.getBlockState(place).is(bi.getBlock())) return;
                 com.rrm.mobslearn.mob.Social.worked(p);
-                for (MobGroup wg : new MobGroup[]{MobGroup.ZOMBIE, MobGroup.SKELETON, MobGroup.SPIDER}) {
+                com.rrm.mobslearn.mob.NewSkills.playerPlaced(sl, place);
+                for (MobGroup wg : new MobGroup[]{MobGroup.ZOMBIE, MobGroup.SKELETON, MobGroup.SPIDER, MobGroup.ENDERMAN}) {
                     double w = watchedBy(sl, p, wg);
                     if (w > 0 && cooldown("build" + wg + p.getUUID(), level, 10)) WorldBrain.teach(Trigger.SEE_BUILD, wg, w, sl, p.blockPosition());
                 }
@@ -162,6 +164,10 @@ public final class Learning {
                     WorldBrain.teach(under ? Trigger.SEE_PILLAR : Trigger.SEE_BRIDGE, MobGroup.ZOMBIE, w, sl, p.blockPosition());
                 }
             });
+        }
+        if (level.getBlockState(hit.getBlockPos()).is(BlockTags.DOORS) && !p.isCreative() && !p.isSpectator()) {
+            double w = watchedBy(sl, p, MobGroup.ZOMBIE);
+            if (w > 0 && cooldown("door" + p.getUUID(), level, 100)) WorldBrain.teach(Trigger.SEE_DOOR, MobGroup.ZOMBIE, w, sl, hit.getBlockPos());
         }
         if ((stack.is(Items.GLASS_BOTTLE) || stack.is(Items.SHEARS)) && level.getBlockState(hit.getBlockPos()).is(BlockTags.BEEHIVES)) {
             if (cooldown("honey" + p.getUUID(), level, 20)) {
@@ -194,7 +200,7 @@ public final class Learning {
             st[0] = dist;
             st[1] = now;
         }
-        if (dist > 22 && cooldown("escape" + mob.getUUID(), level, 300)) {
+        if (dist > escapeDistance(mob) && cooldown("escape" + mob.getUUID(), level, 300)) {
             WorldBrain.teach(Trigger.ESCAPE, g, 1, level, mob.blockPosition());
         }
         if (chase.size() > 2048) chase.clear();
@@ -216,6 +222,22 @@ public final class Learning {
             best = 0.25;
         }
         return best;
+    }
+
+    // Creepers and spiders only track a player within ~16 blocks (less while the world is still "dumb"),
+    // so a fixed 22-block check never fired for them. Scale with the mob's real follow range instead.
+    private static double escapeDistance(Mob mob) {
+        double range = mob.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE);
+        return Math.max(8.0, Math.min(22.0, range * 0.8));
+    }
+
+    /** Called when a hostile mob drops its player target: if the player got away (not died / not creative), count an escape. */
+    public static void observeLostTarget(ServerLevel level, Mob mob, Player p, MobGroup g) {
+        chase.remove(mob.getUUID());
+        if (!WorldBrain.get().enabled || p == null || !p.isAlive() || p.isCreative() || p.isSpectator() || p.level() != level) return;
+        if (mob.distanceTo(p) >= escapeDistance(mob) && cooldown("escape" + mob.getUUID(), level, 300)) {
+            WorldBrain.teach(Trigger.ESCAPE, g, 1, level, mob.blockPosition());
+        }
     }
 
     private static final Map<UUID, double[]> dodge = new HashMap<>();

@@ -39,6 +39,8 @@ public enum Trigger {
     SEE_ARMOR,
     PLAYER_JUMP,
     CHAT_NEAR,
+    SEE_DOOR,
+    KILL_UNDERGROUND,
     WORLD;
 
     public Component describe() {

@@ -4,6 +4,7 @@ import com.rrm.mobslearn.net.Net;
 import com.rrm.mobslearn.learn.Learning;
 import com.rrm.mobslearn.learn.MobGroup;
 import com.rrm.mobslearn.learn.WorldBrain;
+import com.rrm.mobslearn.util.Perf;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -66,6 +67,7 @@ public final class Behaviors {
     private static final Map<UUID, Integer> lastTarget = new HashMap<>();
     private static final Map<String, Long> cooldowns = new HashMap<>();
     private static final Map<UUID, int[]> digging = new HashMap<>();
+    private static final Set<String> reported = new HashSet<>();
 
     private Behaviors() {
     }
@@ -114,18 +116,47 @@ public final class Behaviors {
         cooldowns.clear();
         digging.clear();
         Social.reset();
+        NewSkills.reset();
     }
 
     public static void levelTick(ServerLevel level) {
+        long s0 = Perf.start();
         Combat.tick(level);
+        Perf.stop("combat", s0);
+        s0 = Perf.start();
         Brawl.tick(level);
+        Perf.stop("brawl", s0);
+        s0 = Perf.start();
         Camps.tick(level);
+        Perf.stop("building", s0);
+        s0 = Perf.start();
         Colonies.tick(level);
+        Perf.stop("settlements", s0);
+        s0 = Perf.start();
         Social.tick(level);
         Chatter.tick(level, level.getGameTime());
+        Perf.stop("social", s0);
         long t = level.getGameTime();
         if (t % 5 != 0) return;
+        s0 = Perf.start();
+        try {
+            mobPass(level, t);
+        } finally {
+            Perf.stop("mobs", s0);
+        }
+    }
+
+    /** Mobs near a player, in a fight or doing settlement work are "hot" (every 5 ticks); idle distant ones take turns every 20 ticks. */
+    private static boolean hot(Mob mob, MobGroup g, double playerDist) {
+        if (mob.getTarget() != null || playerDist < 16) return true;
+        if (g == MobGroup.VILLAGER || g == MobGroup.IRON_GOLEM) return true;
+        return Colonies.resident(mob) || Builders.busy(mob) || NewSkills.busy(mob);
+    }
+
+    private static void mobPass(ServerLevel level, long t) {
         Set<Mob> done = new HashSet<>();
+        List<ServerPlayer> scanned = new ArrayList<>();
+        int hotCount = 0, coldCount = 0;
         for (ServerPlayer p : level.players()) {
             if (p.isSpectator()) continue;
             if (p.isUsingItem() && p.getUseItem().has(DataComponents.FOOD) && cooldown("heal" + p.getUUID(), t, 30)) {
@@ -146,15 +177,33 @@ public final class Behaviors {
                     }
                 }
             }
+            boolean overlap = false;
+            for (ServerPlayer q : scanned) if (q.distanceToSqr(p) < 16) overlap = true;
+            if (overlap) continue;
+            scanned.add(p);
             for (Mob mob : level.getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(32))) {
-                if (done.add(mob)) {
-                    try {
-                        tickMob(level, mob, t);
-                    } catch (Exception ignored) {
-                    }
+                if (!done.add(mob)) continue;
+                MobGroup g = MobGroup.of(mob.getType());
+                if (g == null || !mob.isAlive()) continue;
+                long when = t;
+                if (!hot(mob, g, Math.sqrt(mob.distanceToSqr(p)))) {
+                    if (((t / 5) + mob.getId()) % 4 != 0) continue;
+                    when = t - (t % 20);
+                    coldCount++;
+                } else {
+                    hotCount++;
+                }
+                try {
+                    tickMob(level, mob, when);
+                } catch (Exception e) {
+                    StackTraceElement[] st = e.getStackTrace();
+                    String where = e.getClass().getName() + (st.length > 0 ? st[0].toString() : "");
+                    if (reported.size() < 64 && reported.add(where)) com.rrm.mobslearn.MobsLearn.LOG.warn("[MobsLearn] mob behaviour failed for {}", mob.getType(), e);
                 }
             }
         }
+        Perf.count("mobs hot/5t", hotCount);
+        Perf.count("mobs idle/5t", coldCount);
         if (lastTarget.size() > 4096) lastTarget.clear();
         if (digging.size() > 512) digging.clear();
     }
@@ -178,8 +227,10 @@ public final class Behaviors {
             if (prev == null || prev != targetPlayer.getId()) talk(level, mob, targetPlayer, g, r);
             Combat.track(mob);
         } else if (g.hostile) {
-            lastTarget.remove(mob.getUUID());
+            Integer lost = lastTarget.remove(mob.getUUID());
+            if (lost != null && !NewSkills.busy(mob) && level.getEntity(lost) instanceof Player lostPlayer) Learning.observeLostTarget(level, mob, lostPlayer, g);
         }
+        NewSkills.tick(level, mob, g, targetPlayer, t, r);
 
         int lvl;
         switch (g) {
@@ -414,6 +465,7 @@ public final class Behaviors {
     }
 
     public static boolean allowDamage(LivingEntity e, DamageSource src, float amount) {
+        if (NewSkills.flowerHit(e, src.getDirectEntity())) return false;
         if (e instanceof net.minecraft.world.entity.npc.Villager v && VillageDefense.blocks(v, src)) return false;
         int ink = TraitTags.get(e, "squid_ink");
         if (ink > 0 && src.getEntity() instanceof Player p && e.level() instanceof ServerLevel sl && e.getRandom().nextFloat() < 0.3f * ink) {
@@ -544,6 +596,7 @@ public final class Behaviors {
 
     public static void onUnload(Entity e, ServerLevel level) {
         if (e instanceof Mob mob) Combat.forget(mob);
+        NewSkills.onUnload(e);
         if (!(e instanceof Creeper c) || e.getRemovalReason() != Entity.RemovalReason.DISCARDED) return;
         if (c.getSwelling(1f) < 0.3f) return;
         Learning.onExplode(level, c.blockPosition());

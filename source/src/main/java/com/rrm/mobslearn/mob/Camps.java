@@ -71,6 +71,29 @@ public final class Camps {
         transient int preparingStep = -1, lifts;
         transient long preparedAt, jumpedAt;
         transient BlockPos liftFeet;
+        transient boolean rush;
+    }
+
+    /** Blocks settlements may place per server tick (normal building) — instant/time-warp building gets 32x that. */
+    private static int budget, rushBudget;
+    private static long budgetTick = -1;
+
+    private static void refill(ServerLevel level) {
+        long now = level.getServer().getTickCount();
+        if (now != budgetTick) {
+            budgetTick = now;
+            int limit = WorldBrain.get().buildLimit;
+            budget = Math.max(1, limit);
+            rushBudget = Math.max(64, limit * 32);
+        }
+    }
+
+    private static boolean spend(ServerLevel level) {
+        refill(level);
+        if (budget <= 0) return false;
+        budget--;
+        com.rrm.mobslearn.util.Perf.count("blocks built", 1);
+        return true;
     }
 
     private static final List<Camp> camps = new ArrayList<>();
@@ -210,6 +233,7 @@ public final class Camps {
     public static void tick(ServerLevel level) {
         if (server == null) return;
         long t = level.getGameTime();
+        if (anyRush) rush(level);
         if (t % 400 == 0 && griefing(level)) {
             try {
                 maybeStart(level, t);
@@ -221,7 +245,7 @@ public final class Camps {
             String dim = dimId(level);
             for (Iterator<Camp> it = camps.iterator(); it.hasNext(); ) {
                 Camp c = it.next();
-                if (c.done || !c.dim.equals(dim)) continue;
+                if (c.done || c.rush || !c.dim.equals(dim)) continue;
                 try {
                     if (!griefing(level) || (c.colony == null && WorldBrain.levelAt(skillOf(c.kind), level, new BlockPos(c.x, c.y, c.z)) <= 0)) {
                         release(level, c);
@@ -440,6 +464,7 @@ public final class Camps {
             return true;
         }
         if (t < c.nextPlace || RookieActions.hesitate(level, builder, skillOf(c.kind), c.lvl, t)) return true;
+        if (!spend(level)) return true;
         Builders.swing(builder);
         if (op.state.isAir()) {
             BlockState old = level.getBlockState(pos);
@@ -955,6 +980,9 @@ public final class Camps {
             case "cgrove" -> Designs.creeperHall(p, lvl, style, r);
             case "cnest" -> Designs.creeperNest(p, style, r);
             case "vcamp" -> villagerCamp(p);
+            case "flag" -> Landmarks.flag(p, lvl);
+            case "watchtower" -> Landmarks.watchtower(p, lvl);
+            case "vwall" -> palisade(p, lvl, Blocks.OAK_FENCE.defaultBlockState(), Blocks.LANTERN.defaultBlockState(), 5);
             default -> Designs.villageCenter(p, lvl, style, r);
         }
         return p.list();
@@ -1003,7 +1031,7 @@ public final class Camps {
     }
 
     public static boolean isPalisade(String kind) {
-        return kind.equals("palisade") || kind.equals("spalisade") || kind.equals("chedge");
+        return kind.equals("palisade") || kind.equals("spalisade") || kind.equals("chedge") || kind.equals("vwall");
     }
 
     private static BlockState shaped(ServerLevel level, BlockPos pos, BlockState state) {
@@ -1174,28 +1202,61 @@ public final class Camps {
         return n;
     }
 
+    private static boolean anyRush;
+
+    /** Finishes a settlement's projects without builders, but spread over ticks (bounded blocks per tick) to avoid lag spikes. */
     public static void instantBuild(ServerLevel level, String colony) {
         String dim = dimId(level);
-        for (Camp c : new ArrayList<>(camps)) {
+        for (Camp c : camps) {
             if (c.done || !colony.equals(c.colony) || !c.dim.equals(dim)) continue;
+            c.rush = true;
+            anyRush = true;
+        }
+        rush(level);
+    }
+
+    private static void rush(ServerLevel level) {
+        refill(level);
+        String dim = dimId(level);
+        boolean left = false;
+        for (Camp c : new ArrayList<>(camps)) {
+            if (!c.rush) continue;
+            if (c.done || !c.dim.equals(dim)) {
+                if (!c.done) left = true;
+                else c.rush = false;
+                continue;
+            }
             BlockPos origin = new BlockPos(c.x, c.y, c.z);
-            if (!level.isLoaded(origin)) continue;
-            release(level, c);
-            if (c.plan == null) c.plan = plan(c);
-            for (; c.step < c.plan.size(); c.step++) {
+            if (!level.isLoaded(origin)) {
+                left = true;
+                continue;
+            }
+            if (c.plan == null) {
+                release(level, c);
+                c.plan = plan(c);
+            }
+            for (; c.step < c.plan.size() && rushBudget > 0; c.step++) {
                 Op op = c.plan.get(c.step);
                 BlockPos pos = posOf(level, c, origin, op);
                 if (!level.isLoaded(pos)) continue;
                 BlockState cur = level.getBlockState(pos);
                 if (cur.equals(op.state) || !placeable(level, c, op, pos, cur)) continue;
+                rushBudget--;
                 if (op.state.isAir()) {
                     if (cur.is(BlockTags.LOGS)) fellTree(level, c, pos);
                     level.removeBlock(pos, false);
                 } else put(level, c, pos, op);
             }
-            complete(level, c, origin);
-            unstick(level, c, origin);
+            if (c.step >= c.plan.size()) {
+                c.rush = false;
+                complete(level, c, origin);
+                unstick(level, c, origin);
+                dirty = true;
+            } else {
+                left = true;
+            }
         }
+        anyRush = left;
     }
 
     public static void upgradeAll(ServerLevel level, String colony, String kind, int lvl) {

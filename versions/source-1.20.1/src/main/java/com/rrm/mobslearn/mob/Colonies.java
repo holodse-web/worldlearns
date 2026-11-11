@@ -88,6 +88,7 @@ public final class Colonies {
         boolean big, hasPartner;
         transient List<UUID> raiders = new ArrayList<>();
         transient UUID raidPlayer;
+        transient boolean bellRung;
         transient BlockPos raidPos;
         transient long raidUntil, nextSpawn, nextRaid, nextVillageRaid, nextSocial, fairUntil;
         transient int population;
@@ -177,6 +178,20 @@ public final class Colonies {
             aliases.clear();
             if (o.has("relations")) for (var e : o.getAsJsonObject("relations").entrySet()) relations.put(e.getKey(), e.getValue().getAsString());
             if (o.has("aliases")) for (var e : o.getAsJsonObject("aliases").entrySet()) aliases.put(e.getKey(), e.getValue().getAsString());
+            quests.clear();
+            if (o.has("quests")) for (var e : o.getAsJsonObject("quests").entrySet()) {
+                try {
+                    JsonObject j = e.getValue().getAsJsonObject();
+                    Quest q = new Quest();
+                    q.colony = j.get("colony").getAsString();
+                    q.type = j.get("type").getAsString();
+                    q.what = j.get("what").getAsString();
+                    q.need = j.get("need").getAsInt();
+                    q.have = j.get("have").getAsInt();
+                    quests.put(UUID.fromString(e.getKey()), q);
+                } catch (RuntimeException ignored) {
+                }
+            }
             if (o.has("visited")) for (JsonElement e : o.getAsJsonArray("visited")) {
                 JsonObject v = e.getAsJsonObject();
                 visited.computeIfAbsent(v.get("dim").getAsString(), k -> new java.util.HashMap<>()).put(v.get("cell").getAsLong(), v.get("t").getAsLong());
@@ -331,6 +346,18 @@ public final class Colonies {
             for (var e : aliases.entrySet()) al.addProperty(e.getKey(), e.getValue());
             root.add("relations", rel);
             root.add("aliases", al);
+            JsonObject qs = new JsonObject();
+            for (var e : quests.entrySet()) {
+                Quest q = e.getValue();
+                JsonObject j = new JsonObject();
+                j.addProperty("colony", q.colony);
+                j.addProperty("type", q.type);
+                j.addProperty("what", q.what);
+                j.addProperty("need", q.need);
+                j.addProperty("have", q.have);
+                qs.add(e.getKey().toString(), j);
+            }
+            root.add("quests", qs);
             Path f = file();
             Path tmp = f.resolveSibling("mobslearn_colonies.json.tmp");
             Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
@@ -408,7 +435,7 @@ public final class Colonies {
     private static final String[] IMPORTANT = {"mobslearn.colony.found.", "mobslearn.colony.tier.", "mobslearn.colony.grew_away", "mobslearn.colony.neutral",
         "mobslearn.colony.angry", "mobslearn.colony.collapsed", "mobslearn.colony.village_fell", "mobslearn.colony.daughter", "mobslearn.colony.grudge",
         "mobslearn.colony.banned", "mobslearn.colony.forgiven", "mobslearn.colony.moved", "mobslearn.colony.war", "mobslearn.colony.alliance",
-        "mobslearn.colony.friends", "mobslearn.colony.cleared"};
+        "mobslearn.colony.friends", "mobslearn.colony.cleared", "mobslearn.colony.truce"};
 
     private static boolean important(Component msg) {
         if (!(msg.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents tc)) return false;
@@ -431,8 +458,26 @@ public final class Colonies {
         return best;
     }
 
+    private static final String[] PERSONAL = {"mobslearn.colony.grudge", "mobslearn.colony.banned", "mobslearn.colony.forgiven"};
+
+    private static String chronicleIcon(String key) {
+        if (key.contains("war")) return "iron_sword";
+        if (key.contains("alliance") || key.contains("friends")) return "emerald";
+        if (key.contains("fell") || key.contains("collapsed")) return "cobweb";
+        if (key.endsWith("village") || key.contains(".village")) return "bell";
+        if (key.endsWith("skeleton")) return "skeleton_skull";
+        if (key.endsWith("creeper")) return "creeper_head";
+        if (key.endsWith("zombie")) return "zombie_head";
+        return "writable_book";
+    }
+
     private static void tell(ServerLevel level, BlockPos at, int radius, Component msg) {
         if (!important(msg)) return;
+        if (msg.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents tc) {
+            boolean personal = false;
+            for (String k : PERSONAL) if (tc.getKey().startsWith(k)) personal = true;
+            if (!personal) WorldBrain.chronicle(msg, chronicleIcon(tc.getKey()));
+        }
         for (ServerPlayer p : level.players()) {
             if (p.distanceToSqr(at.getX(), at.getY(), at.getZ()) >= (double) radius * radius) continue;
             Colony near = nearestTo(p);
@@ -764,6 +809,7 @@ public final class Colonies {
                 int rad = palisadeRadius(level, center);
                 if (rad > 0) Camps.addProject(level, c.kind.equals("skeleton") ? "spalisade" : c.kind.equals("creeper") ? "chedge" : "palisade", rad, center, c.id, crew);
             }
+            landmarks(level, c, crew, r);
         } else {
             Camps.addProject(level, "villager", Math.min(3, c.tier + 1), center, c.id, crew, 0, style(c));
             int adults = level.getEntitiesOfClass(Villager.class, new AABB(center).inflate(48, 24, 48), v -> !v.isBaby()).size();
@@ -793,6 +839,45 @@ public final class Colonies {
                 Camps.addProject(level, "vspecial", type, site, c.id, "villager", facing(site, center), style(c));
                 if (type != 6) path(level, c, site, facing(site, center), type == 5 ? 6 : 5);
                 c.wood -= SPECIAL_WOOD;
+            }
+            landmarks(level, c, "villager", r);
+            if (c.tier >= 3 && Camps.count(c.id, "vwall") == 0) {
+                int rad = palisadeRadius(level, center);
+                if (rad > 0) Camps.addProject(level, "vwall", 40, center, c.id, "villager");
+            }
+        }
+    }
+
+    /** Flags around the centre (one more per tier) and a watchtower from tier 2: visible signs that the settlement grows. */
+    private static void landmarks(ServerLevel level, Colony c, String crew, RandomSource r) {
+        if (c.camp) return;
+        BlockPos center = c.center();
+        int flags = Math.min(4, 1 + c.tier);
+        for (int i = Camps.count(c.id, "flag"); i < flags; i++) {
+            double a = Math.PI / 4 + i * Math.PI / 2;
+            BlockPos site = null;
+            for (int d = 7; d <= 11 && site == null; d++) {
+                int x = center.getX() + (int) Math.round(Math.cos(a) * d), z = center.getZ() + (int) Math.round(Math.sin(a) * d);
+                if (!level.isLoaded(new BlockPos(x, center.getY(), z))) continue;
+                int y = Camps.groundY(level, x, z);
+                if (Math.abs(y - center.getY()) > 6) continue;
+                BlockPos at = new BlockPos(x, y, z);
+                if (!level.getBlockState(at.below()).getFluidState().isEmpty()) continue;
+                boolean clear = true;
+                for (int k = 0; k <= 4 && clear; k++) if (!level.getBlockState(at.above(k)).canBeReplaced()) clear = false;
+                if (clear) site = at;
+            }
+            if (site == null) continue;
+            Camps.addProject(level, "flag", Landmarks.color(c.kind, i), site, c.id, crew);
+        }
+        if (c.tier >= 2 && Camps.count(c.id, "watchtower") == 0) {
+            for (int attempt = 0; attempt < 4; attempt++) {
+                double a = r.nextDouble() * Math.PI * 2;
+                int d = hostile(c.kind) ? 22 : 20;
+                BlockPos site = Camps.siteNear(level, center.offset((int) (Math.cos(a) * d), 0, (int) (Math.sin(a) * d)), 2, 5, r, c.id);
+                if (site == null) continue;
+                Camps.addProject(level, "watchtower", Landmarks.material(c.kind), site, c.id, crew);
+                break;
             }
         }
     }
@@ -1147,8 +1232,41 @@ public final class Colonies {
         raid(level, c, residents, enemy, t);
     }
 
+    /** The raided village rings its bell: villagers hide, golems go for the raiders, nearby players get a warning. */
+    private static void alarm(ServerLevel level, Colony raiders, Mob scout) {
+        BlockPos center = raiders.raidPos;
+        BlockPos bell = null;
+        for (BlockPos p : BlockPos.betweenClosed(center.offset(-8, -4, -8), center.offset(8, 4, 8))) {
+            if (level.getBlockState(p).is(Blocks.BELL)) {
+                bell = p.immutable();
+                break;
+            }
+        }
+        BlockPos ringAt = bell != null ? bell : center;
+        if (bell != null && level.getBlockState(bell).getBlock() instanceof net.minecraft.world.level.block.BellBlock bb) {
+            bb.attemptToRing(level, bell, null);
+            for (int i = 1; i <= 3; i++) Behaviors.later(i * 14, () -> {
+                if (level.getBlockState(ringAt).getBlock() instanceof net.minecraft.world.level.block.BellBlock b2) b2.attemptToRing(level, ringAt, null);
+            });
+        } else {
+            for (int i = 0; i < 4; i++) Behaviors.later(i * 14, () -> level.playSound(null, ringAt, SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 2f, 1f));
+        }
+        for (Villager v : level.getEntitiesOfClass(Villager.class, new AABB(center).inflate(48, 16, 48))) {
+            if (!v.isSleeping()) v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(center, 0.7f, 2));
+        }
+        for (net.minecraft.world.entity.animal.IronGolem golem : level.getEntitiesOfClass(net.minecraft.world.entity.animal.IronGolem.class, new AABB(center).inflate(48, 16, 48))) {
+            if (golem.getTarget() == null) golem.setTarget(scout);
+        }
+        Component msg = Component.translatable("mobslearn.colony.bell", kindName(raiders));
+        WorldBrain.chronicle(msg, "bell");
+        for (ServerPlayer p : level.players()) {
+            if (p.distanceToSqr(center.getX(), center.getY(), center.getZ()) < 160 * 160) Net.notice(p, msg);
+        }
+    }
+
     private static void startRaid(ServerLevel level, Colony c, List<Mob> party, Player player, Colony village, long t) {
         c.raiders.clear();
+        c.bellRung = false;
         for (Mob m : party) c.raiders.add(m.getUUID());
         c.raidPlayer = player == null ? null : player.getUUID();
         c.raidPos = village == null ? null : village.center();
@@ -1177,6 +1295,10 @@ public final class Colonies {
                     c.raiders.remove(id);
                     continue;
                 }
+                if (c.raidPos != null && !c.bellRung && m.distanceToSqr(c.raidPos.getX(), c.raidPos.getY(), c.raidPos.getZ()) < 44 * 44) {
+                    c.bellRung = true;
+                    alarm(level, c, m);
+                }
                 if (target != null) {
                     if (c.neutral) continue;
                     if (m.distanceTo(target) > 14) m.getNavigation().moveTo(target, 1.15);
@@ -1190,6 +1312,18 @@ public final class Colonies {
                         if (prey != null) m.setTarget(prey);
                     }
                 }
+            }
+            if (c.raiders.isEmpty() && c.raidPos != null) {
+                Colony v = settlementAt(level, c.raidPos, 8);
+                if (v != null && v.kind.equals("village") && v.active()) {
+                    Component msg = Component.translatable("mobslearn.colony.raid_repelled", kindName(c));
+                    WorldBrain.chronicle(msg, "shield");
+                    for (ServerPlayer p : level.players()) {
+                        if (p.distanceToSqr(v.x, v.y, v.z) < 128 * 128) Net.notice(p, msg);
+                    }
+                    level.playSound(null, v.center(), SoundEvents.VILLAGER_CELEBRATE, SoundSource.NEUTRAL, 1.5f, 1f);
+                }
+                c.raidPos = null;
             }
             return;
         }
@@ -1943,11 +2077,156 @@ public final class Colonies {
     public static void calm(Mob m) {
         if (!(m.getTarget() instanceof Player)) return;
         Colony c = homeOf(m);
-        if (c != null && c.neutral && !c.raiders.contains(m.getUUID())) m.setTarget(null);
+        if (c != null && c.neutral && !c.raiders.contains(m.getUUID())) {
+            m.setTarget(null);
+            if (m.isUsingItem()) m.stopUsingItem();
+            m.setAggressive(false);
+        }
+    }
+
+    /** True when a resident of a peaceful settlement should ignore this player (not banned, not a raider, not provoked). */
+    public static boolean refusesTarget(Mob m, net.minecraft.world.entity.LivingEntity target) {
+        if (!(target instanceof Player p) || p.isCreative() || p.isSpectator()) return false;
+        if (colonies.isEmpty() || !WorldBrain.get().enabled) return false;
+        Colony c = homeOf(m);
+        if (c == null || !c.neutral || c.raiders.contains(m.getUUID())) return false;
+        if (m.getLastHurtByMob() == p) return false;
+        return c.grudges.getOrDefault(p.getUUID().toString(), 0) < BAN;
+    }
+
+    // --- Diplomacy: truce gifts and chief quests -------------------------------------------------------------------------
+
+    private static final class Quest {
+        String colony, type, what;
+        int need, have;
+    }
+
+    private static final java.util.Map<UUID, Quest> quests = new java.util.HashMap<>();
+
+    /** How many of the held item a settlement accepts as a peace offering (0 = not a fitting gift). */
+    private static int giftNeed(String kind, ItemStack held) {
+        if (held.isEmpty()) return 0;
+        String id = BuiltInRegistries.ITEM.getKey(held.getItem()).getPath();
+        return switch (kind) {
+            case "creeper" -> id.startsWith("music_disc") ? 1 : id.equals("gunpowder") ? 16 : 0;
+            case "skeleton" -> id.equals("bone") ? 16 : id.equals("arrow") ? 32 : 0;
+            case "zombie" -> id.equals("cooked_beef") || id.equals("cooked_porkchop") || id.equals("cooked_mutton") || id.equals("cooked_chicken") ? 8 : 0;
+            default -> 0;
+        };
+    }
+
+    private static InteractionResult truce(ServerLevel level, Colony c, ServerPlayer p, Entity who) {
+        ItemStack held = p.getMainHandItem();
+        int need = giftNeed(c.kind, held);
+        if (need <= 0) return InteractionResult.PASS;
+        if (c.grudges.getOrDefault(p.getUUID().toString(), 0) >= BAN) {
+            Net.notice(p, Component.translatable("mobslearn.colony.truce.refused", kindName(c)));
+            return InteractionResult.SUCCESS;
+        }
+        if (held.getCount() < need) {
+            Net.notice(p, Component.translatable("mobslearn.colony.truce.more", need, held.getHoverName()));
+            return InteractionResult.SUCCESS;
+        }
+        if (!p.isCreative()) held.shrink(need);
+        c.neutral = true;
+        c.peace = Math.max(c.peace, PEACE_TIME);
+        c.grudges.remove(p.getUUID().toString());
+        dirty = true;
+        for (Mob m : residents(level, c, 80)) {
+            if (m.getTarget() instanceof Player) {
+                m.setTarget(null);
+                if (m.isUsingItem()) m.stopUsingItem();
+                m.setAggressive(false);
+            }
+        }
+        level.sendParticles(ParticleTypes.HEART, who.getX(), who.getY() + who.getBbHeight() + 0.3, who.getZ(), 8, 0.5, 0.3, 0.5, 0.0);
+        level.playSound(null, who.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.NEUTRAL, 1f, 0.8f);
+        tell(level, c.center(), 160, Component.translatable("mobslearn.colony.truce." + c.kind, p.getName()));
+        Net.notice(p, Component.translatable("mobslearn.colony.truce.done", kindName(c)));
+        return InteractionResult.SUCCESS;
+    }
+
+    private static String[][] questTable(String kind) {
+        return switch (kind) {
+            case "skeleton" -> new String[][]{{"hunt", "zombie", "5"}, {"hunt", "spider", "4"}, {"fetch", "arrow", "32"}, {"fetch", "string", "12"}, {"fetch", "flint", "10"}};
+            case "creeper" -> new String[][]{{"hunt", "spider", "4"}, {"hunt", "skeleton", "4"}, {"fetch", "gunpowder", "10"}, {"fetch", "sand", "24"}, {"fetch", "moss_block", "8"}};
+            default -> new String[][]{{"hunt", "skeleton", "5"}, {"hunt", "creeper", "3"}, {"fetch", "cooked_beef", "6"}, {"fetch", "bread", "8"}, {"fetch", "iron_ingot", "3"}};
+        };
+    }
+
+    private static Component questText(Quest q) {
+        if (q.type.equals("hunt")) return Component.translatable("mobslearn.quest.hunt", q.need, Component.translatable("mobslearn.group." + q.what), q.have, q.need);
+        return Component.translatable("mobslearn.quest.fetch", q.need, item(q.what).getName(new ItemStack(item(q.what))));
+    }
+
+    private static InteractionResult quest(ServerLevel level, Colony c, ServerPlayer p, Entity chief) {
+        Quest q = quests.get(p.getUUID());
+        RandomSource r = level.getRandom();
+        if (q != null && q.colony.equals(c.id)) {
+            boolean done = q.type.equals("hunt") ? q.have >= q.need : count(p, item(q.what)) >= q.need;
+            if (!done) {
+                Net.notice(p, Component.translatable("mobslearn.quest.progress", questText(q)));
+                return InteractionResult.SUCCESS;
+            }
+            if (q.type.equals("fetch")) take(p, item(q.what), q.need);
+            quests.remove(p.getUUID());
+            int emeralds = 3 + c.tier + r.nextInt(3);
+            List<ItemStack> rewards = new ArrayList<>();
+            rewards.add(new ItemStack(Items.EMERALD, emeralds));
+            if (c.tier >= 2 && r.nextFloat() < 0.5f) rewards.add(new ItemStack(Items.EXPERIENCE_BOTTLE, 3 + r.nextInt(4)));
+            if (c.tier >= 3 && r.nextFloat() < 0.25f) rewards.add(new ItemStack(Items.DIAMOND, 1));
+            for (ItemStack st : rewards) if (!p.getInventory().add(st)) level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level, p.getX(), p.getY() + 0.5, p.getZ(), st));
+            int g = c.grudges.getOrDefault(p.getUUID().toString(), 0);
+            if (g > 0) setGrudge(level, c, p, g - 10);
+            c.peace += PEACE_TIME / 4;
+            dirty = true;
+            level.playSound(null, chief.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.NEUTRAL, 1f, 1.2f);
+            level.sendParticles(ParticleTypes.HAPPY_VILLAGER, chief.getX(), chief.getY() + 2, chief.getZ(), 16, 0.5, 0.4, 0.5, 0);
+            Net.notice(p, Component.translatable("mobslearn.quest.done", emeralds));
+            WorldBrain.chronicle("mobslearn.chronicle.quest", "emerald", p.getName().getString(), "t:mobslearn.settlements.kind." + c.kind);
+            return InteractionResult.SUCCESS;
+        }
+        if (q != null) Net.notice(p, Component.translatable("mobslearn.quest.abandoned"));
+        String[][] table = questTable(c.kind);
+        String[] pick = table[r.nextInt(table.length)];
+        Quest nq = new Quest();
+        nq.colony = c.id;
+        nq.type = pick[0];
+        nq.what = pick[1];
+        nq.need = Integer.parseInt(pick[2]) + (pick[0].equals("hunt") ? c.tier / 2 : c.tier * 2);
+        quests.put(p.getUUID(), nq);
+        dirty = true;
+        level.playSound(null, chief.blockPosition(), SoundEvents.BOOK_PAGE_TURN, SoundSource.NEUTRAL, 1f, 1f);
+        Net.notice(p, Component.translatable("mobslearn.quest.given." + c.kind, questText(nq)));
+        p.sendSystemMessage(Component.translatable("mobslearn.quest.chat", kindName(c), questText(nq)));
+        return InteractionResult.SUCCESS;
+    }
+
+    private static void questKill(ServerPlayer p, Mob m) {
+        Quest q = quests.get(p.getUUID());
+        if (q == null || !q.type.equals("hunt") || q.have >= q.need) return;
+        MobGroup g = MobGroup.of(m.getType());
+        if (g == null || !g.key().equals(q.what)) return;
+        Colony c = byId(q.colony);
+        if (c != null && homeOf(m) == c) return;
+        q.have++;
+        dirty = true;
+        Net.notice(p, Component.translatable(q.have >= q.need ? "mobslearn.quest.ready" : "mobslearn.quest.count", q.have, q.need));
     }
 
     public static InteractionResult interact(Player player, Level level, InteractionHand hand, Entity entity) {
         if (level.isClientSide() || hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
+        if (player instanceof ServerPlayer dsp && level instanceof ServerLevel dl && !(entity instanceof Villager) && WorldBrain.get().enabled) {
+            Colony home = homeOf(entity);
+            if (home != null && hostile(home.kind) && home.active()) {
+                if (!home.neutral) {
+                    InteractionResult r = truce(dl, home, dsp, entity);
+                    if (r != InteractionResult.PASS) return r;
+                } else if (player.isShiftKeyDown() && entity.getTags().contains(CHIEF)) {
+                    return quest(dl, home, dsp, entity);
+                }
+            }
+        }
         if (player instanceof ServerPlayer psp && level instanceof ServerLevel sl && (entity instanceof Villager || entity.getTags().contains(CHIEF))) {
             Colony home = entity instanceof Villager ? near(sl, entity.blockPosition(), "village", 56, true) : homeOf(entity);
             if (home != null) {
@@ -2253,8 +2532,24 @@ public final class Colonies {
             j.addProperty("next", c.tier >= max ? -1 : (int) Math.min(100, (c.age - c.lastTier) * 100 / TIER_TIME));
             arr.add(j);
         }
+        JsonArray rels = new JsonArray();
+        List<Colony> shown = list.subList(0, Math.min(40, list.size()));
+        for (int i = 0; i < shown.size(); i++) {
+            for (int k = i + 1; k < shown.size(); k++) {
+                Colony a = shown.get(i), b = shown.get(k);
+                if (!a.known.contains(me) || !b.known.contains(me)) continue;
+                String rel = relation(a, b);
+                if (rel.isEmpty()) continue;
+                JsonObject j = new JsonObject();
+                j.addProperty("a", a.id);
+                j.addProperty("b", b.id);
+                j.addProperty("r", rel);
+                rels.add(j);
+            }
+        }
         JsonObject root = new JsonObject();
         root.add("colonies", arr);
+        root.add("relations", rels);
         root.addProperty("warp", warp);
         com.rrm.mobslearn.net.SNet.send(player, new Net.ColoniesPayload(root.toString()));
     }
@@ -2333,6 +2628,7 @@ public final class Colonies {
     private static final java.util.Map<UUID, Integer> defense = new java.util.HashMap<>();
 
     public static void mobKilled(ServerLevel level, ServerPlayer p, Mob m) {
+        if (!quests.isEmpty()) questKill(p, m);
         if (!(m instanceof net.minecraft.world.entity.monster.Enemy)) return;
         boolean raider = false;
         for (Colony c : colonies) if (c.raiders.remove(m.getUUID())) raider = true;

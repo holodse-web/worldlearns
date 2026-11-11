@@ -25,6 +25,6 @@ find "$W/src/main/java" -name '*.java' > "$W/build/sources.txt"
 env -u JAVA_TOOL_OPTIONS $J/javac --release $REL -encoding UTF-8 -proc:none -nowarn -Xmaxerrs 2000 -cp "$CP" -d "$W/build/classes" @"$W/build/sources.txt"
 cp -r "$W/src/main/resources/"* "$W/build/classes/"
 (cd "$W/build/classes" && zip -qr ../libs/named.jar .)
-OUTJAR="$W/build/libs/worldlearns-1.0.0-beta+$V.jar"
+OUTJAR="$W/build/libs/worldlearns-1.1.0+$V.jar"
 env -u JAVA_TOOL_OPTIONS $J/java -cp "$PORT/tools:$T/*" MapTool remap "$W/build/libs/named.jar" "$OUTJAR" $E/mc/merged.tiny named intermediary mixin $E/mc/mc-named.jar $(ls $E/libs/*.jar $FAPI/*.jar | tr '\n' ' ')
 echo "built $OUTJAR"

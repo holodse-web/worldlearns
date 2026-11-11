@@ -41,6 +41,7 @@ public final class ClientKnowledge {
     public static void clear() {
         knowledge.points.clear();
         knowledge.journal.clear();
+        knowledge.chronicle.clear();
         knowledge.speed = 1.0;
         knowledge.absurd = knowledge.combat = knowledge.enabled = true;
         knowledge.difficulty = 1;

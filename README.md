@@ -2,7 +2,7 @@
 
 A Minecraft Fabric mod by **RRM Network**. Mobs learn from player actions, while villages and monster settlements grow, form alliances and go to war.
 
-> **Beta — back up your entire world before installing, updating or removing the mod.** Construction changes real blocks. Bugs and balance changes are possible.
+> **Back up your entire world before installing, updating or removing the mod.** Construction changes real blocks.
 
 ## Features
 
@@ -16,7 +16,7 @@ A Minecraft Fabric mod by **RRM Network**. Mobs learn from player actions, while
 
 ## Versions and requirements
 
-Current mod version: **1.0.0-beta**, with a Minecraft version suffix. Internal mod ID: `mobslearn`.
+Current mod version: **1.1.0**, with a Minecraft version suffix. Internal mod ID: `mobslearn`.
 
 | Minecraft | Java | Fabric Loader minimum | Fabric API minimum | Source |
 | --- | --- | --- | --- | --- |

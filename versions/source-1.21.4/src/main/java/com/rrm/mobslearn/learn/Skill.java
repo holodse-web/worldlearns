@@ -36,7 +36,7 @@ public record Skill(String id, MobGroup group, Trigger trigger, MobGroup source,
         "zombie_crit", "zombie_medic", "zombie_gapple", "zombie_strafe", "zombie_bridge", "zombie_knockback", "zombie_totem",
         "skeleton_volley", "skeleton_dodge", "skeleton_swordsman", "skeleton_medic", "creeper_flank", "creeper_dash",
         "spider_pounce", "spider_strafe", "spider_medic", "enderman_combo", "enderman_medic", "witch_kite",
-        "pillager_strafe", "cow_kick", "cow_herd", "pig_charge", "sheep_ram", "rabbit_bite", "horse_kick", "golem_throw", "witch_brew");
+        "pillager_strafe", "skeleton_cover", "phantom_hunter", "cow_kick", "cow_herd", "pig_charge", "sheep_ram", "rabbit_bite", "horse_kick", "golem_throw", "witch_brew");
 
     public boolean combat() {
         return COMBAT.contains(id);
@@ -193,6 +193,17 @@ public record Skill(String id, MobGroup group, Trigger trigger, MobGroup source,
         add("pillager_sniper", MobGroup.PILLAGER, Trigger.KILL_PROJECTILE, 15, 40, 80, "crossbow");
         add("pillager_strafe", MobGroup.PILLAGER, Trigger.DODGE, 10, 25, 50, "leather_boots");
         absurd("pillager_copycat", MobGroup.PILLAGER, Trigger.KILL_ANY, 40, 100, 200, "emerald");
+        add("creeper_sapper", MobGroup.CREEPER, Trigger.UNREACHABLE, 10, 25, 50, "tnt_minecart");
+        add("skeleton_cover", MobGroup.SKELETON, Trigger.KILL_PROJECTILE, 15, 40, 80, "cobblestone_wall");
+        add("zombie_doorbreaker", MobGroup.ZOMBIE, Trigger.SEE_DOOR, 8, 20, 40, "oak_door");
+        add("spider_ceiling", MobGroup.SPIDER, Trigger.KILL_UNDERGROUND, 15, 40, 80, "pointed_dripstone");
+        add("enderman_burglar", MobGroup.ENDERMAN, Trigger.SEE_BUILD, 20, 60, 150, "bricks");
+        add("witch_healer", MobGroup.WITCH, Trigger.PLAYER_HEAL, 4, 10, 20, "splash_potion");
+        add("drowned_ashore", MobGroup.ZOMBIE, Trigger.ESCAPE, 10, 25, 50, "trident");
+        add("phantom_hunter", MobGroup.PHANTOM, Trigger.UNREACHABLE, 6, 16, 35, "phantom_membrane");
+        absurd("creeper_sneeze", MobGroup.CREEPER, Trigger.EXPLODE, 10, 30, 60, "paper");
+        add("zombie_merchant", MobGroup.ZOMBIE, Trigger.TRADE, MobGroup.VILLAGER, 20, 50, 100, "emerald", true);
+        absurd("skeleton_flowers", MobGroup.SKELETON, Trigger.KILL_PROJECTILE, 20, 50, 100, "cornflower");
         absurd("world_names", MobGroup.WORLD, Trigger.WORLD, 10, 30, 60, "name_tag");
         absurd("world_talk", MobGroup.WORLD, Trigger.WORLD, 15, 40, 70, "writable_book");
         add("world_genius", MobGroup.WORLD, Trigger.WORLD, 15, 45, 85, "enchanted_book");

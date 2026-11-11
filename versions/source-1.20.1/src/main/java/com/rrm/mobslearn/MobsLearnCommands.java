@@ -134,6 +134,28 @@ public final class MobsLearnCommands {
                     for (String line : list) ctx.getSource().sendSuccess(() -> Component.literal("  " + line), false);
                     return list.size();
                 })))
+            .then(Commands.literal("perf")
+                .executes(ctx -> {
+                    for (String line : com.rrm.mobslearn.util.Perf.report()) ctx.getSource().sendSuccess(() -> Component.literal(line), false);
+                    return 1;
+                })
+                .then(Commands.literal("reset").executes(ctx -> {
+                    com.rrm.mobslearn.util.Perf.reset();
+                    ctx.getSource().sendSuccess(() -> Component.literal("World Learns profiler reset."), false);
+                    return 1;
+                })))
+            .then(Commands.literal("buildlimit")
+                .executes(ctx -> {
+                    ctx.getSource().sendSuccess(() -> Component.translatable("mobslearn.cmd.buildlimit.now", WorldBrain.get().buildLimit), false);
+                    return WorldBrain.get().buildLimit;
+                })
+                .then(Commands.argument("blocks", IntegerArgumentType.integer(1, 4096)).executes(ctx -> {
+                    int x = IntegerArgumentType.getInteger(ctx, "blocks");
+                    WorldBrain.get().buildLimit = x;
+                    WorldBrain.save();
+                    ctx.getSource().sendSuccess(() -> Component.translatable("mobslearn.cmd.buildlimit.set", x), true);
+                    return 1;
+                })))
             .then(Commands.literal("timewarp")
                 .executes(ctx -> {
                     ctx.getSource().sendSuccess(() -> Component.translatable("mobslearn.cmd.timewarp.now", com.rrm.mobslearn.mob.Colonies.warp()), false);

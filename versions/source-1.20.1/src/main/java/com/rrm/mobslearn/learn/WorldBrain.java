@@ -154,6 +154,25 @@ public final class WorldBrain {
         }
         save(); syncAll();
     }
+    /** Adds a line to the world chronicle (shown in the journal). Args starting with "t:" are translation keys. */
+    public static void chronicle(String key, String icon, String... args) {
+        if (server == null) return;
+        long day = server.overworld() == null ? 1 : server.overworld().getDayTime() / 24000L + 1;
+        if (knowledge.chronicle(day, key, java.util.Arrays.asList(args), icon)) dirty = true;
+    }
+
+    /** Records an already-built translatable message (e.g. a settlement announcement) in the chronicle. */
+    public static void chronicle(net.minecraft.network.chat.Component msg, String icon) {
+        if (!(msg.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents tc)) return;
+        java.util.List<String> args = new java.util.ArrayList<>();
+        for (Object a : tc.getArgs()) {
+            if (a instanceof net.minecraft.network.chat.Component c && c.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents inner && inner.getArgs().length == 0) args.add("t:" + inner.getKey());
+            else if (a instanceof net.minecraft.network.chat.Component c) args.add(c.getString());
+            else args.add(String.valueOf(a));
+        }
+        chronicle(tc.getKey(), icon, args.toArray(new String[0]));
+    }
+
     public static void syncAll() {
         if (server != null) for (ServerPlayer player : server.getPlayerList().getPlayers()) syncTo(player);
     }

@@ -50,14 +50,20 @@ public class MobsLearn implements ModInitializer {
 
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents.CHUNK_LOAD.register((level, chunk) -> com.rrm.mobslearn.mob.Colonies.chunkLoaded(level, chunk, chunk.getInhabitedTime() == 0));
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            long started = com.rrm.mobslearn.util.Perf.start();
             WorldBrain.serverTick();
             if (WorldBrain.get().enabled) Behaviors.serverTick(server);
+            com.rrm.mobslearn.util.Perf.stop("core", started);
+            com.rrm.mobslearn.util.Perf.endTick();
         });
         ServerTickEvents.END_WORLD_TICK.register(level -> {
             if (WorldBrain.get().enabled) Behaviors.levelTick(level);
         });
 
         ServerEntityEvents.ENTITY_LOAD.register(Traits::onLoad);
+        ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            if (WorldBrain.get().enabled) com.rrm.mobslearn.mob.NewSkills.onEntityLoad(entity, level);
+        });
         ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> {
             if (WorldBrain.get().enabled) Behaviors.onUnload(entity, level);
         });
@@ -79,6 +85,7 @@ public class MobsLearn implements ModInitializer {
         UseEntityCallback.EVENT.register((player, world, hand, entity, hit) -> com.rrm.mobslearn.mob.VillageDefense.interact(player, world, hand, entity));
         UseEntityCallback.EVENT.register((player, world, hand, entity, hit) -> com.rrm.mobslearn.mob.Colonies.interact(player, world, hand, entity));
         UseBlockCallback.EVENT.register(com.rrm.mobslearn.mob.Colonies::chestOpened);
+        UseEntityCallback.EVENT.register((player, world, hand, entity, hit) -> com.rrm.mobslearn.mob.NewSkills.interact(player, world, hand, entity));
         UseEntityCallback.EVENT.register(Learning::useEntity);
         UseBlockCallback.EVENT.register(Learning::useBlock);
         net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, be) -> {

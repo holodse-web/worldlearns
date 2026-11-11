@@ -2,6 +2,7 @@ import re, os, sys
 root = sys.argv[1]
 R = [
     (r'\.entityTags\(\)', '.getTags()'),
+    (r'return en\.teleport\(x, y, z\);', 'return en.randomTeleport(x, y, z, true);'),
     (r'MobEffects\.SPEED\b', 'MobEffects.MOVEMENT_SPEED'),
     (r'MobEffects\.JUMP_BOOST\b', 'MobEffects.JUMP'),
     (r'MobEffects\.STRENGTH\b', 'MobEffects.DAMAGE_BOOST'),

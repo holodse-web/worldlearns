@@ -26,6 +26,8 @@ public class SettlementsScreen extends Screen {
     }
 
     private static final List<Row> rows = new ArrayList<>();
+    private static final List<RelationsMap.Link> links = new ArrayList<>();
+    private static boolean mapMode;
     private static int warp = 1;
     private static boolean received;
     private static long receivedAt;
@@ -64,6 +66,11 @@ public class SettlementsScreen extends Screen {
                 num(o, "peace", -1), num(o, "houses", 0), o.has("days") ? o.get("days").getAsLong() : 0, bool(o, "natural"), bool(o, "camp"),
                 num(o, "maxTier", 1), num(o, "next", -1), o.has("id") ? o.get("id").getAsString() : "", num(o, "wood", 0), num(o, "grudge", 0)));
         }
+        links.clear();
+        if (root.has("relations")) for (JsonElement e : root.getAsJsonArray("relations")) {
+            JsonObject o = e.getAsJsonObject();
+            links.add(new RelationsMap.Link(o.get("a").getAsString(), o.get("b").getAsString(), o.get("r").getAsString()));
+        }
         received = true;
         receivedAt = Util.getMillis();
     }
@@ -79,6 +86,12 @@ public class SettlementsScreen extends Screen {
             request();
         }
         addRenderableWidget(new MlButton(width / 2 - 55, height - 27, 110, 20, Component.translatable("mobslearn.gui.back"), b -> onClose()));
+        int w = Math.min(470, width - 24), x = (width - w) / 2;
+        addRenderableWidget(new MlButton(x + w - 92, 20, 92, 18, Component.translatable(mapMode ? "mobslearn.map.list" : "mobslearn.map.open"), b -> {
+            mapMode = !mapMode;
+            Ui.click(1.2f);
+            rebuildWidgets();
+        }));
     }
 
     @Override
@@ -95,6 +108,7 @@ public class SettlementsScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (super.mouseClicked(mouseX, mouseY, button)) return true;
+        if (mapMode) return false;
         for (int[] h : forgetHits) {
             if (mouseX >= h[1] && mouseX < h[1] + h[3] && mouseY >= h[2] && mouseY < h[2] + h[4] && h[0] < rows.size()) {
                 String id = rows.get(h[0]).id();
@@ -158,6 +172,10 @@ public class SettlementsScreen extends Screen {
                 : Component.translatable("mobslearn.settlements.d.next", r.next, r.projects > 0 ? Component.translatable("mobslearn.settlements.d.wait")
                 : Component.empty()));
         }
+        if (hostile && r.state.equals("active")) {
+            if (r.neutral && r.chief) out.add(Component.translatable("mobslearn.settlements.d.quest"));
+            else if (!r.neutral) out.add(Component.translatable("mobslearn.settlements.d.gift." + r.kind));
+        }
         out.add(Component.translatable("mobslearn.settlements.d.tip." + (r.state.equals("active") ? r.kind : "ruins")));
         return out;
     }
@@ -181,6 +199,19 @@ public class SettlementsScreen extends Screen {
         g.enableScissor(x + 1, top + 1, x + w - 1, bottom - 1);
         hits.clear();
         forgetHits.clear();
+        if (mapMode) {
+            List<RelationsMap.Node> nodes = new ArrayList<>();
+            for (Row r : rows) {
+                boolean act = r.state.equals("active");
+                int acc = r.kind.equals("village") ? 0xFF7FC8BE : !act ? 0xFF8A8778 : r.neutral ? Ui.GOLD : Ui.RED;
+                nodes.add(new RelationsMap.Node(r.id, r.camp ? "village" : r.kind, icon(r), r.x, r.z, acc, r.known));
+            }
+            double ppx = minecraft.player == null ? 0 : minecraft.player.getX(), ppz = minecraft.player == null ? 0 : minecraft.player.getZ();
+            RelationsMap.draw(g, font, nodes, links, ppx, ppz, x + 6, top + 6, w - 12, bottom - top - 12, mx, my);
+            g.disableScissor();
+            super.render(g, mx, my, partial);
+            return;
+        }
         int y = top + 8 - Math.round(scroll);
         if (rows.isEmpty()) {
             Component empty = Component.translatable(received ? "mobslearn.settlements.empty" : "mobslearn.settlements.loading");

@@ -5,7 +5,8 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "CreeperAccessor",
-    "EndermanMixin"
+    "EndermanMixin",
+    "MobTargetMixin"
   ],
   "injectors": {
     "defaultRequire": 1

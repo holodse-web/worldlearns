@@ -17,14 +17,28 @@ public class Knowledge {
     public final Map<String, Map<String, Double>> regions = new LinkedHashMap<>();
     public record JournalEntry(long day, String skill, int level) {}
     public final List<JournalEntry> journal = new ArrayList<>();
+    /** World chronicle: notable events (settlements founded, wars, raids, truces...). args prefixed "t:" are translation keys. */
+    public record ChronicleEntry(long day, String key, List<String> args, String icon) {
+        public net.minecraft.network.chat.Component text() {
+            Object[] parts = new Object[args.size()];
+            for (int i = 0; i < parts.length; i++) {
+                String a = args.get(i);
+                parts[i] = a.startsWith("t:") ? net.minecraft.network.chat.Component.translatable(a.substring(2)) : a;
+            }
+            return net.minecraft.network.chat.Component.translatable(key, parts);
+        }
+    }
+    public static final int MAX_CHRONICLE = 160;
+    public final List<ChronicleEntry> chronicle = new ArrayList<>();
     public double speed = 1.0;
     public boolean enabled = true, absurd = true, combat = true;
     public int difficulty = 1;
     public int warp = 1;
+    public int buildLimit = 32;
 
     public void clear() {
-        points.clear(); regions.clear(); journal.clear();
-        speed = 1.0; enabled = absurd = combat = true; difficulty = 1;
+        points.clear(); regions.clear(); journal.clear(); chronicle.clear();
+        speed = 1.0; enabled = absurd = combat = true; difficulty = 1; buildLimit = 32;
     }
 
     public boolean allows(Skill s) {
@@ -83,6 +97,17 @@ public class Knowledge {
         journal.add(new JournalEntry(Math.max(1, day), skill.id(), level));
     }
 
+    public boolean chronicle(long day, String key, List<String> args, String icon) {
+        int from = Math.max(0, chronicle.size() - 24);
+        for (int i = from; i < chronicle.size(); i++) {
+            ChronicleEntry e = chronicle.get(i);
+            if (e.day() == day && e.key().equals(key) && e.args().equals(args)) return false;
+        }
+        if (chronicle.size() >= MAX_CHRONICLE) chronicle.remove(0);
+        chronicle.add(new ChronicleEntry(Math.max(1, day), key, List.copyOf(args), icon == null ? "writable_book" : icon));
+        return true;
+    }
+
     public JsonObject json(boolean includeRegions) {
         JsonObject o = new JsonObject();
         o.addProperty("schema", 2);
@@ -90,6 +115,7 @@ public class Knowledge {
         o.addProperty("speed", speed); o.addProperty("enabled", enabled);
         o.addProperty("absurd", absurd); o.addProperty("combat", combat);
         o.addProperty("difficulty", difficulty);
+        o.addProperty("buildLimit", buildLimit);
         JsonArray log = new JsonArray();
         for (JournalEntry entry : journal) {
             JsonObject line = new JsonObject();
@@ -97,6 +123,16 @@ public class Knowledge {
             log.add(line);
         }
         o.add("journal", log);
+        JsonArray chron = new JsonArray();
+        for (ChronicleEntry entry : chronicle) {
+            JsonObject line = new JsonObject();
+            line.addProperty("day", entry.day()); line.addProperty("key", entry.key()); line.addProperty("icon", entry.icon());
+            JsonArray a = new JsonArray();
+            for (String arg : entry.args()) a.add(arg);
+            line.add("args", a);
+            chron.add(line);
+        }
+        o.add("chronicle", chron);
         if (includeRegions) o.add("regions", GSON.toJsonTree(regions));
         return o;
     }
@@ -127,6 +163,7 @@ public class Knowledge {
         if (o.has("absurd")) absurd = o.get("absurd").getAsBoolean();
         if (o.has("combat")) combat = o.get("combat").getAsBoolean();
         if (o.has("difficulty")) difficulty = Math.max(0, Math.min(2, o.get("difficulty").getAsInt()));
+        if (o.has("buildLimit")) buildLimit = Math.max(1, Math.min(4096, o.get("buildLimit").getAsInt()));
         if (o.has("warp")) warp = Math.max(1, o.get("warp").getAsInt());
         if (o.has("journal") && o.get("journal").isJsonArray()) {
             for (JsonElement e : o.getAsJsonArray("journal")) {
@@ -135,6 +172,18 @@ public class Knowledge {
                     Skill s = Skill.byId(line.get("skill").getAsString());
                     int level = line.get("level").getAsInt();
                     if (s != null && level >= 1 && level <= Skill.MAX_LEVEL) record(line.get("day").getAsLong(), s, level);
+                } catch (RuntimeException ignored) {}
+            }
+        }
+        if (o.has("chronicle") && o.get("chronicle").isJsonArray()) {
+            for (JsonElement e : o.getAsJsonArray("chronicle")) {
+                try {
+                    JsonObject line = e.getAsJsonObject();
+                    String key = line.get("key").getAsString();
+                    if (!key.startsWith("mobslearn.")) continue;
+                    List<String> args = new ArrayList<>();
+                    if (line.has("args")) for (JsonElement a : line.getAsJsonArray("args")) args.add(a.getAsString());
+                    chronicle(line.get("day").getAsLong(), key, args, line.has("icon") ? line.get("icon").getAsString() : null);
                 } catch (RuntimeException ignored) {}
             }
         }

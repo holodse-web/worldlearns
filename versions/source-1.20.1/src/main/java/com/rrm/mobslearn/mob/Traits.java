@@ -83,7 +83,7 @@ public final class Traits {
             int traits = 0, combat = 0;
             for (Skill s : list) {
                 int lvl = k.allows(s) ? WorldBrain.levelAt(s.id(), level, mob.blockPosition()) : 0;
-                if (lvl <= 0) continue;
+                if (lvl <= 0 || !NewSkills.applies(s, mob)) continue;
                 if (isGenius) {
                     apply(level, mob, s.id(), Math.min(2, lvl), r);
                 } else if (traits < MAX_TRAITS && (!s.combat() || combat < MAX_COMBAT) && r.nextFloat() < spawnChance(lvl)) {
@@ -268,7 +268,7 @@ public final class Traits {
         try {
             for (Skill s : list) {
                 int lvl = k.allows(s) ? WorldBrain.levelAt(s.id(), level, mob.blockPosition()) : 0;
-                if (lvl <= 0) continue;
+                if (lvl <= 0 || !NewSkills.applies(s, mob)) continue;
                 int have = TraitTags.get(mob, s.id());
                 if (have >= lvl) continue;
                 if (have > 0) {
@@ -336,6 +336,7 @@ public final class Traits {
             }
             case "zombie_fireproof", "phantom_daylight" -> effect(mob, MobEffects.FIRE_RESISTANCE, 0);
             case "zombie_sprinter" -> speed(mob, 0.04 * lvl);
+            case "zombie_merchant" -> NewSkills.setupMerchant(mob, lvl, r);
             case "zombie_swimmer" -> effect(mob, MobEffects.DOLPHINS_GRACE, lvl - 1);
             case "zombie_copycat", "pillager_copycat" -> {
                 Player p = level.getNearestPlayer(mob, 96);

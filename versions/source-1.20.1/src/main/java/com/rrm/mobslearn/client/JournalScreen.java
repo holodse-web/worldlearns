@@ -27,6 +27,8 @@ public final class JournalScreen extends Screen {
     private final List<int[]> chipHits = new ArrayList<>();
     private final List<MobGroup> chipGroups = new ArrayList<>();
     private final Map<String, Float> hover = new HashMap<>();
+    private boolean chronicleAll;
+    private int[] chronicleHit;
 
     public JournalScreen(Screen parent) {
         super(Component.translatable("mobslearn.journal.title"));
@@ -57,6 +59,12 @@ public final class JournalScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (super.mouseClicked(mouseX, mouseY, button)) return true;
+        if (chronicleHit != null && mouseX >= chronicleHit[0] && mouseX < chronicleHit[0] + chronicleHit[2]
+            && mouseY >= chronicleHit[1] && mouseY < chronicleHit[1] + chronicleHit[3]) {
+            chronicleAll = !chronicleAll;
+            Ui.click(1.1f);
+            return true;
+        }
         for (int i = 0; i < chipHits.size(); i++) {
             int[] h = chipHits.get(i);
             if (mouseX >= h[0] && mouseX < h[0] + h[2] && mouseY >= h[1] && mouseY < h[1] + h[3]) {
@@ -184,6 +192,46 @@ public final class JournalScreen extends Screen {
                 com.rrm.mobslearn.client.Ui.text(g, font, Math.round(f * 100) + "%", bx, cy + 26 - 1, FAINT, false);
             }
             y += ((soon.size() + scols - 1) / scols) * (sh + gap) + 6;
+        }
+
+        g.drawString(font, Component.translatable("mobslearn.chronicle.title"), ix, y, Ui.GOLD, false);
+        y += 13;
+        if (k.chronicle.isEmpty()) {
+            for (FormattedCharSequence line : font.split(Component.translatable("mobslearn.chronicle.empty"), iw)) {
+                g.drawString(font, line, ix, y, FAINT, false);
+                y += 11;
+            }
+            y += 6;
+        } else {
+            int limit = chronicleAll ? k.chronicle.size() : Math.min(6, k.chronicle.size());
+            for (int ci = k.chronicle.size() - 1; ci >= k.chronicle.size() - limit; ci--) {
+                Knowledge.ChronicleEntry ce = k.chronicle.get(ci);
+                List<FormattedCharSequence> lines = font.split(ce.text(), iw - 74);
+                int eh = Math.max(20, 6 + lines.size() * 10);
+                g.fill(ix, y, ix + iw, y + eh, CARD);
+                g.fill(ix, y, ix + 2, y + eh, Ui.GOLD);
+                icon(g, ce.icon(), ix + 6, y + (eh - 14) / 2, 14);
+                Component pill = Component.translatable("mobslearn.journal.day", ce.day());
+                g.drawString(font, pill, ix + 24, y + 4, Ui.GOLD, false);
+                int ty = y + 4;
+                for (FormattedCharSequence line : lines) {
+                    g.drawString(font, line, ix + 70, ty, 0xFFE8E2CC, false);
+                    ty += 10;
+                }
+                y += eh + 3;
+            }
+            if (k.chronicle.size() > 6) {
+                Component more = Component.translatable(chronicleAll ? "mobslearn.chronicle.less" : "mobslearn.chronicle.more", k.chronicle.size());
+                int mw = font.width(more) + 12;
+                boolean over = inside && mx >= ix && mx < ix + mw && my >= y && my < y + 14;
+                g.fill(ix, y, ix + mw, y + 14, over ? 0x50FFD25A : 0x28FFD25A);
+                g.drawString(font, more, ix + 6, y + 3, Ui.GOLD, false);
+                chronicleHit = new int[]{ix, y, mw, 14};
+                y += 18;
+            } else {
+                chronicleHit = null;
+            }
+            y += 6;
         }
 
         Map<MobGroup, Integer> counts = new LinkedHashMap<>();
