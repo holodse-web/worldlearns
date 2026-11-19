@@ -27,6 +27,7 @@ version = "${fabricMetadata.version}-neoforge"
 base.archivesName = 'worldlearns'
 layout.buildDirectory = layout.projectDirectory.dir("build/${minecraftVersion}")
 java.toolchain.languageVersion = JavaLanguageVersion.of(target[1])
+java.withSourcesJar()
 
 def prepared = layout.buildDirectory.dir('sources')
 def prepareSources = tasks.register('prepareSources', Exec) {
@@ -42,6 +43,12 @@ sourceSets.main.java.setSrcDirs([prepared.map { it.dir('java') }])
 sourceSets.main.resources.setSrcDirs([prepared.map { it.dir('resources') }])
 tasks.named('compileJava') { dependsOn prepareSources }
 tasks.named('processResources') { dependsOn prepareSources }
+tasks.named('sourcesJar') {
+    dependsOn prepareSources
+    from(files('../../../LICENSE', '../../../THIRD_PARTY_NOTICES.md')) {
+        into 'META-INF'
+    }
+}
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 
 if (legacy) {

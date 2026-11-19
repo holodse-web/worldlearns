@@ -6,14 +6,14 @@ A Minecraft mod for Fabric and NeoForge by **RRM Network**. Mobs learn from your
 
 ## Download World Learns 1.2.0
 
-Choose the row for your Minecraft version and download the JAR for your loader. Each Minecraft version links to its release notes.
+Choose the row for your Minecraft version and download the JAR for your loader. Each Minecraft version links to its release notes. The NeoForge sources JARs contain the Java code and resources for each port.
 
-| Minecraft | Java | Fabric | NeoForge |
-| --- | --- | --- | --- |
-| [26.3](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B26.3) | 25+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B26.3/worldlearns-1.2.0%2B26.3.jar) | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B26.3/worldlearns-1.2.0%2B26.3-neoforge.jar) |
-| [1.21.4](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B1.21.4) | 21+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.4/worldlearns-1.2.0%2B1.21.4.jar) | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.4/worldlearns-1.2.0%2B1.21.4-neoforge.jar) |
-| [1.21.1](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B1.21.1) | 21+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.1/worldlearns-1.2.0%2B1.21.1.jar) | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.1/worldlearns-1.2.0%2B1.21.1-neoforge.jar) |
-| [1.20.1](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B1.20.1) | 17+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.20.1/worldlearns-1.2.0%2B1.20.1.jar) | [Download legacy build](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.20.1/worldlearns-1.2.0%2B1.20.1-neoforge.jar) |
+| Minecraft | Java | Fabric | NeoForge | NeoForge sources |
+| --- | --- | --- | --- | --- |
+| [26.3](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B26.3) | 25+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B26.3/worldlearns-1.2.0%2B26.3.jar) | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B26.3/worldlearns-1.2.0%2B26.3-neoforge.jar) | [Sources JAR](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B26.3/worldlearns-1.2.0%2B26.3-neoforge-sources.jar) |
+| [1.21.4](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B1.21.4) | 21+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.4/worldlearns-1.2.0%2B1.21.4.jar) | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.4/worldlearns-1.2.0%2B1.21.4-neoforge.jar) | [Sources JAR](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.4/worldlearns-1.2.0%2B1.21.4-neoforge-sources.jar) |
+| [1.21.1](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B1.21.1) | 21+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.1/worldlearns-1.2.0%2B1.21.1.jar) | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.1/worldlearns-1.2.0%2B1.21.1-neoforge.jar) | [Sources JAR](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.1/worldlearns-1.2.0%2B1.21.1-neoforge-sources.jar) |
+| [1.20.1](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B1.20.1) | 17+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.20.1/worldlearns-1.2.0%2B1.20.1.jar) | [Download legacy build](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.20.1/worldlearns-1.2.0%2B1.20.1-neoforge.jar) | [Legacy sources JAR](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.20.1/worldlearns-1.2.0%2B1.20.1-neoforge-sources.jar) |
 
 See the [changelog](CHANGELOG.md#120) for more on what changed in 1.2.0.
 
@@ -48,7 +48,7 @@ Use a Fabric API release for your exact Minecraft version. The alternate build f
 
 1. Back up the complete world folder.
 2. Install the matching NeoForge version, or Fabric Loader and Fabric API.
-3. Put the World Learns JAR for your Minecraft version in `mods`.
+3. Put the gameplay JAR for your Minecraft version in `mods`.
 4. Open a world, press **K**, and review the wiki and settings.
 
 For multiplayer, install matching versions on the server and every client. Gameplay runs on the server; the client provides the interface and notifications. Clients without the mod have not been tested.
@@ -104,7 +104,7 @@ Build a NeoForge JAR with Gradle 9.x from the repository root. Use the Java vers
 gradle -p source/tools/neoforge -PminecraftVersion=1.21.1 build
 ```
 
-The JAR is written to `source/tools/neoforge/build/<minecraftVersion>/libs/`.
+Gradle writes the mod JAR and the `-sources.jar` to `source/tools/neoforge/build/<minecraftVersion>/libs/`. Use `sourcesJar` in place of `build` to generate just the source archive.
 
 ## Repository contents
 
