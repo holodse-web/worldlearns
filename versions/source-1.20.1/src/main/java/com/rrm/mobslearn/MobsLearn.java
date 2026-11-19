@@ -97,6 +97,5 @@ public class MobsLearn implements ModInitializer {
         });
 
         CommandRegistrationCallback.EVENT.register((dispatcher, ctx, selection) -> MobsLearnCommands.register(dispatcher));
-        LOG.info("[MobsLearn] World Learns by RRM Network loaded");
     }
 }

@@ -42,6 +42,15 @@ public record Skill(String id, MobGroup group, Trigger trigger, MobGroup source,
         return COMBAT.contains(id);
     }
 
+    private static final java.util.Set<String> FRESH = java.util.Set.of(
+        "squid_jet", "squid_school", "fish_school", "fish_dodge", "rabbit_burrow", "rabbit_thief", "cat_guard", "cat_alarm",
+        "parrot_scout", "parrot_thief", "horse_dodge", "horse_return", "phantom_dive", "witch_curse", "witch_familiar",
+        "slime_merge", "pillager_horn", "golem_repair", "wolf_howl", "bee_guard", "chicken_alarm");
+
+    public boolean fresh() {
+        return group == MobGroup.BOSS || FRESH.contains(id);
+    }
+
     public Component displayName() {
         return Component.translatable("mobslearn.skill." + id);
     }
@@ -204,6 +213,36 @@ public record Skill(String id, MobGroup group, Trigger trigger, MobGroup source,
         absurd("creeper_sneeze", MobGroup.CREEPER, Trigger.EXPLODE, 10, 30, 60, "paper");
         add("zombie_merchant", MobGroup.ZOMBIE, Trigger.TRADE, MobGroup.VILLAGER, 20, 50, 100, "emerald", true);
         absurd("skeleton_flowers", MobGroup.SKELETON, Trigger.KILL_PROJECTILE, 20, 50, 100, "cornflower");
+        add("squid_jet", MobGroup.SQUID, Trigger.KILL_MELEE, 10, 25, 50, "glow_ink_sac");
+        add("squid_school", MobGroup.SQUID, Trigger.KILL_ANY, 20, 50, 100, "ink_sac");
+        add("fish_school", MobGroup.FISH, Trigger.KILL_ANY, 15, 40, 80, "salmon");
+        add("fish_dodge", MobGroup.FISH, Trigger.KILL_PROJECTILE, 6, 15, 30, "trident");
+        add("rabbit_burrow", MobGroup.RABBIT, Trigger.KILL_MELEE, 10, 25, 50, "coarse_dirt");
+        absurd("rabbit_thief", MobGroup.RABBIT, Trigger.FEED, 8, 20, 40, "carrot");
+        add("cat_guard", MobGroup.CAT, Trigger.FEED, 8, 20, 40, "creeper_head");
+        add("cat_alarm", MobGroup.CAT, Trigger.FEED, 12, 30, 60, "candle");
+        add("parrot_scout", MobGroup.PARROT, Trigger.FEED, 8, 20, 40, "glowstone_dust");
+        absurd("parrot_thief", MobGroup.PARROT, Trigger.FEED, 10, 25, 50, "gold_nugget");
+        add("horse_dodge", MobGroup.HORSE, Trigger.KILL_PROJECTILE, 6, 15, 30, "iron_horse_armor");
+        add("horse_return", MobGroup.HORSE, Trigger.FEED, 8, 20, 40, "lead");
+        add("phantom_dive", MobGroup.PHANTOM, Trigger.KILL_MELEE, 8, 20, 40, "feather");
+        add("witch_curse", MobGroup.WITCH, Trigger.PLAYER_HEAL, 4, 10, 20, "fermented_spider_eye");
+        absurd("witch_familiar", MobGroup.WITCH, Trigger.KILL_ANY, 10, 25, 50, "bat_spawn_egg");
+        add("slime_merge", MobGroup.SLIME, Trigger.KILL_ANY, 20, 50, 100, "lime_dye");
+        add("pillager_horn", MobGroup.PILLAGER, Trigger.ESCAPE, 10, 25, 50, "goat_horn");
+        add("golem_repair", MobGroup.IRON_GOLEM, Trigger.TRADE, MobGroup.VILLAGER, 15, 40, 80, "anvil", false);
+        add("wolf_howl", MobGroup.WOLF, Trigger.FEED, 10, 25, 50, "clock");
+        add("bee_guard", MobGroup.BEE, Trigger.HONEY, 10, 25, 50, "honey_bottle");
+        absurd("chicken_alarm", MobGroup.CHICKEN, Trigger.FEED, 10, 25, 50, "note_block");
+        add("dragon_beds", MobGroup.BOSS, Trigger.DRAGON_BEDS, 3, 8, 15, "respawn_anchor");
+        add("dragon_cages", MobGroup.BOSS, Trigger.DRAGON_CRYSTALS, 3, 8, 15, "iron_bars");
+        add("dragon_pillar", MobGroup.BOSS, Trigger.DRAGON_PILLAR, 3, 8, 15, "obsidian");
+        add("wither_hunter", MobGroup.BOSS, Trigger.WITHER_HIDE, 3, 8, 15, "wither_skeleton_skull");
+        add("wither_guard", MobGroup.BOSS, Trigger.WITHER_DOWN, 3, 8, 15, "nether_star");
+        add("warden_sneak", MobGroup.BOSS, Trigger.WARDEN_SNEAK, 5, 15, 30, "sculk_sensor");
+        add("warden_hunt", MobGroup.BOSS, Trigger.WARDEN_ESCAPE, 5, 15, 30, "echo_shard");
+        add("guardian_call", MobGroup.BOSS, Trigger.GUARDIAN_DOWN, 3, 8, 15, "prismarine_crystals");
+        add("guardian_curse", MobGroup.BOSS, Trigger.GUARDIAN_MINE, 10, 30, 60, "sponge");
         absurd("world_names", MobGroup.WORLD, Trigger.WORLD, 10, 30, 60, "name_tag");
         absurd("world_talk", MobGroup.WORLD, Trigger.WORLD, 15, 40, 70, "writable_book");
         add("world_genius", MobGroup.WORLD, Trigger.WORLD, 15, 45, 85, "enchanted_book");

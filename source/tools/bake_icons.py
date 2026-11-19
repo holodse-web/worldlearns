@@ -170,7 +170,7 @@ def shield_icon():
     return flat([im])
 
 
-HEADS = {'zombie_head': 'entity/zombie/zombie', 'skeleton_skull': 'entity/skeleton/skeleton', 'creeper_head': 'entity/creeper/creeper'}
+HEADS = {'zombie_head': 'entity/zombie/zombie', 'skeleton_skull': 'entity/skeleton/skeleton', 'creeper_head': 'entity/creeper/creeper', 'wither_skeleton_skull': 'entity/skeleton/wither_skeleton'}
 
 
 def head(path):

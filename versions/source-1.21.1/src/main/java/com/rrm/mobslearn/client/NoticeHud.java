@@ -57,6 +57,18 @@ public final class NoticeHud {
     }
 
     private static Style styleOf(String key) {
+        if (key.startsWith("mobslearn.nemesis.slain")) return new Style("mobslearn.notice.nemesis", Items.SKELETON_SKULL, Ui.GOLD);
+        if (key.startsWith("mobslearn.nemesis.")) return new Style("mobslearn.notice.nemesis", Items.WITHER_SKELETON_SKULL, 0xFFE5534B);
+        if (key.startsWith("mobslearn.raid.repelled")) return new Style("mobslearn.notice.home", Items.SHIELD, Ui.GREEN);
+        if (key.startsWith("mobslearn.raid.")) return new Style("mobslearn.notice.home", Items.CHEST, 0xFFE8726A);
+        if (key.startsWith("mobslearn.captive.")) return new Style("mobslearn.notice.captive", Items.LEAD, 0xFFC9A66B);
+        if (key.startsWith("mobslearn.hearth.")) return new Style("mobslearn.notice.hearth", Items.SOUL_CAMPFIRE, 0xFF5FD1FF);
+        if (key.startsWith("mobslearn.frameup.")) return new Style("mobslearn.notice.frameup", Items.PURPLE_BANNER, 0xFFB46CFF);
+        if (key.startsWith("mobslearn.merc.")) return new Style("mobslearn.notice.merc", Items.IRON_SWORD, 0xFF5FD1FF);
+        if (key.startsWith("mobslearn.ally.")) return new Style("mobslearn.notice.village", Items.BELL, Ui.GOLD);
+        if (key.startsWith("mobslearn.march.")) return new Style("mobslearn.notice.march", Items.RED_BANNER, 0xFFE04CE0);
+        if (key.startsWith("mobslearn.boss.")) return new Style("mobslearn.notice.boss", Items.DRAGON_HEAD, 0xFFE04CE0);
+        if (key.startsWith("mobslearn.wild.")) return new Style("mobslearn.notice.info", Items.CAT_SPAWN_EGG, Ui.GREEN);
         boolean colony = key.startsWith("mobslearn.colony.") || key.startsWith("mobslearn.camp.");
         if (colony && !key.contains("raid") && !key.contains("thief") && !key.contains("fell") && !key.contains("gloom")) {
             if (key.endsWith(".zombie")) return new Style("mobslearn.notice.settlement", Items.ZOMBIE_HEAD, 0xFF8BC24A);

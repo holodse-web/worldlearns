@@ -1,0 +1,28 @@
+{
+  "criteria": {
+    "earned": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "requirements": [
+    [
+      "earned"
+    ]
+  ],
+  "display": {
+    "icon": {
+      "item": "minecraft:red_banner"
+    },
+    "title": {
+      "translate": "mobslearn.advancement.frame_up.title"
+    },
+    "description": {
+      "translate": "mobslearn.advancement.frame_up.desc"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "parent": "mobslearn:colony_neighbors"
+}

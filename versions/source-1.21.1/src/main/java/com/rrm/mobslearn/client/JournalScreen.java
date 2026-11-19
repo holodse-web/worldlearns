@@ -198,11 +198,11 @@ public final class JournalScreen extends Screen {
             y += ((soon.size() + scols - 1) / scols) * (sh + gap) + 6;
         }
 
-        g.drawString(font, Component.translatable("mobslearn.chronicle.title"), ix, y, Ui.GOLD, false);
+        com.rrm.mobslearn.client.Ui.text(g, font, Component.translatable("mobslearn.chronicle.title"), ix, y, Ui.GOLD, false);
         y += 13;
         if (k.chronicle.isEmpty()) {
             for (FormattedCharSequence line : font.split(Component.translatable("mobslearn.chronicle.empty"), iw)) {
-                g.drawString(font, line, ix, y, FAINT, false);
+                com.rrm.mobslearn.client.Ui.text(g, font, line, ix, y, FAINT, false);
                 y += 11;
             }
             y += 6;
@@ -216,10 +216,10 @@ public final class JournalScreen extends Screen {
                 g.fill(ix, y, ix + 2, y + eh, Ui.GOLD);
                 icon(g, ce.icon(), ix + 6, y + (eh - 14) / 2, 14);
                 Component pill = Component.translatable("mobslearn.journal.day", ce.day());
-                g.drawString(font, pill, ix + 24, y + 4, Ui.GOLD, false);
+                com.rrm.mobslearn.client.Ui.text(g, font, pill, ix + 24, y + 4, Ui.GOLD, false);
                 int ty = y + 4;
                 for (FormattedCharSequence line : lines) {
-                    g.drawString(font, line, ix + 70, ty, 0xFFE8E2CC, false);
+                    com.rrm.mobslearn.client.Ui.text(g, font, line, ix + 70, ty, 0xFFE8E2CC, false);
                     ty += 10;
                 }
                 y += eh + 3;
@@ -229,7 +229,7 @@ public final class JournalScreen extends Screen {
                 int mw = font.width(more) + 12;
                 boolean over = inside && mx >= ix && mx < ix + mw && my >= y && my < y + 14;
                 g.fill(ix, y, ix + mw, y + 14, over ? 0x50FFD25A : 0x28FFD25A);
-                g.drawString(font, more, ix + 6, y + 3, Ui.GOLD, false);
+                com.rrm.mobslearn.client.Ui.text(g, font, more, ix + 6, y + 3, Ui.GOLD, false);
                 chronicleHit = new int[]{ix, y, mw, 14};
                 y += 18;
             } else {

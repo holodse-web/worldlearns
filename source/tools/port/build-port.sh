@@ -15,7 +15,7 @@ J=${JDK:-/home/claude/env/jdk-25.0.5+8}/bin
 W=$PORT/work-$V
 if [ -z "$NOPIPE" ]; then
 "$HERE/pipeline.sh" $V "$ROOT" "$W"
-(cd "$W" && patch -s -p1 < "$HERE/patches/patch-$V.diff")
+(cd "$W" && patch -s -p1 --no-backup-if-mismatch < "$HERE/patches/patch-$V.diff")
 fi
 rm -rf "$W/build"
 FAPI=$E/fapi-named
@@ -25,6 +25,7 @@ find "$W/src/main/java" -name '*.java' > "$W/build/sources.txt"
 env -u JAVA_TOOL_OPTIONS $J/javac --release $REL -encoding UTF-8 -proc:none -nowarn -Xmaxerrs 2000 -cp "$CP" -d "$W/build/classes" @"$W/build/sources.txt"
 cp -r "$W/src/main/resources/"* "$W/build/classes/"
 (cd "$W/build/classes" && zip -qr ../libs/named.jar .)
-OUTJAR="$W/build/libs/worldlearns-1.1.0+$V.jar"
+VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$W/src/main/resources/fabric.mod.json")
+OUTJAR="$W/build/libs/worldlearns-$VERSION.jar"
 env -u JAVA_TOOL_OPTIONS $J/java -cp "$PORT/tools:$T/*" MapTool remap "$W/build/libs/named.jar" "$OUTJAR" $E/mc/merged.tiny named intermediary mixin $E/mc/mc-named.jar $(ls $E/libs/*.jar $FAPI/*.jar | tr '\n' ' ')
 echo "built $OUTJAR"

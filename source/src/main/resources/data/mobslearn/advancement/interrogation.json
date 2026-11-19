@@ -1,0 +1,28 @@
+{
+  "criteria": {
+    "earned": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "requirements": [
+    [
+      "earned"
+    ]
+  ],
+  "display": {
+    "icon": {
+      "id": "minecraft:filled_map"
+    },
+    "title": {
+      "translate": "mobslearn.advancement.interrogation.title"
+    },
+    "description": {
+      "translate": "mobslearn.advancement.interrogation.desc"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": false,
+    "hidden": false
+  },
+  "parent": "mobslearn:captive_taken"
+}

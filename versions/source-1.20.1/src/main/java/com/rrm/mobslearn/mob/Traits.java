@@ -63,6 +63,10 @@ public final class Traits {
             if (glow != null && glow.isInfiniteDuration() && !glow.isVisible()) mob.removeEffect(MobEffects.GLOWING);
             if (mob.getType() == EntityType.SQUID) TraitTags.set(mob, "squid_glow", 0);
         }
+        if (mob instanceof Creeper) {
+            MobEffectInstance jump = mob.getEffect(MobEffects.JUMP);
+            if (jump != null && jump.isInfiniteDuration() && !jump.isVisible()) mob.removeEffect(MobEffects.JUMP);
+        }
         if (mob.getTags().contains(TraitTags.SEEN)) {
             migrate(mob);
             refreshMob(level, mob);
@@ -72,7 +76,7 @@ public final class Traits {
         mob.addTag(TraitTags.SEEN);
         mob.addTag(BALANCE_V2);
         MobGroup g = MobGroup.of(mob.getType());
-        if (g == null) return;
+        if (g == null || g == MobGroup.BOSS) return;
         Knowledge k = WorldBrain.get();
         RandomSource r = level.getRandom();
         try {
@@ -111,7 +115,7 @@ public final class Traits {
                 }
             }
         } catch (Exception ex) {
-            MobsLearn.LOG.warn("[MobsLearn] Failed to apply traits to {}", mob, ex);
+            MobsLearn.LOG.warn("Traits failed: {}", mob, ex);
         }
     }
 
@@ -203,7 +207,7 @@ public final class Traits {
         switch (id) {
             case "zombie_fireproof", "phantom_daylight" -> reconcileEffect(mob, MobEffects.FIRE_RESISTANCE, 0, enabled);
             case "zombie_swimmer" -> reconcileEffect(mob, MobEffects.DOLPHINS_GRACE, rank - 1, enabled);
-            case "creeper_jumper", "spider_climber" -> reconcileEffect(mob, MobEffects.JUMP, Math.min(1, rank - 1), enabled);
+            case "spider_climber" -> reconcileEffect(mob, MobEffects.JUMP, Math.min(1, rank - 1), enabled);
             case "spider_ghost" -> reconcileEffect(mob, MobEffects.INVISIBILITY, 0, enabled);
             case "witch_tank" -> {
                 if (rank >= 2) reconcileEffect(mob, MobEffects.DAMAGE_RESISTANCE, 0, enabled);
@@ -250,7 +254,7 @@ public final class Traits {
             updateAwareness(mob);
             if (g == MobGroup.ZOMBIE) practicalBasics(level, mob);
         }
-        if (g == null || g.hostile || g == MobGroup.WORLD || !mob.isAlive()) return;
+        if (g == null || g.hostile || g == MobGroup.WORLD || g == MobGroup.BOSS || !mob.isAlive()) return;
         Knowledge k = WorldBrain.get();
         int epoch = localEpoch(level, mob, g);
         if (epoch <= TraitTags.get(mob, "epoch")) return;
@@ -280,7 +284,7 @@ public final class Traits {
                 }
             }
         } catch (Exception ex) {
-            MobsLearn.LOG.warn("[MobsLearn] Failed to update traits of {}", mob, ex);
+            MobsLearn.LOG.warn("Traits update failed: {}", mob, ex);
         }
     }
 
@@ -364,7 +368,7 @@ public final class Traits {
             case "creeper_heavy" -> {
                 attribute(mob, Attributes.KNOCKBACK_RESISTANCE, id, Math.min(0.8, 0.25 * lvl));
             }
-            case "creeper_jumper" -> effect(mob, MobEffects.JUMP, Math.min(1, lvl - 1));
+            case "creeper_jumper" -> { }
             case "creeper_big" -> {
                 if (mob instanceof Creeper c) ((CreeperAccessor) c).mobslearn$setExplosionRadius(4);
             }

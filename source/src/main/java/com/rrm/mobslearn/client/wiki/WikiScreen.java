@@ -143,6 +143,8 @@ public class WikiScreen extends Screen {
         blocks.add(new InfoCards("settle", new String[]{"bell", "hay_block", "lantern", "compass", "clock", "emerald"}, 0xFF6FBF4A));
         blocks.add(new SectionHead("villagers", "mobslearn.wiki.vill.kicker", "mobslearn.wiki.vill.title", "mobslearn.wiki.vill.sub"));
         blocks.add(new InfoCards("vill", new String[]{"emerald", "totem_of_undying", "iron_pickaxe", "jukebox", "goat_horn", "iron_block", "iron_sword", "iron_axe", "writable_book"}, 0xFFB3866A));
+        blocks.add(new SectionHead("events", "mobslearn.wiki.events.kicker", "mobslearn.wiki.events.title", "mobslearn.wiki.events.sub"));
+        blocks.add(new InfoCards("events", new String[]{"wither_skeleton_skull", "chest", "lead", "soul_campfire", "loom", "iron_sword", "bell", "nether_star", "goat_horn"}, 0xFFE5534B));
         blocks.add(new SectionHead("absurd", "mobslearn.wiki.absurd.kicker", "mobslearn.wiki.absurd.title", "mobslearn.wiki.absurd.sub"));
         blocks.add(new Marquee());
         blocks.add(new AbsurdCards());
@@ -151,7 +153,7 @@ public class WikiScreen extends Screen {
         blocks.add(new SectionHead("commands", "mobslearn.wiki.cmd.kicker", "mobslearn.wiki.cmd.title", "mobslearn.wiki.cmd.sub"));
         blocks.add(new Commands());
         blocks.add(new SectionHead("faq", "mobslearn.wiki.faq.kicker", "mobslearn.wiki.faq.title", null));
-        for (int i = 0; i < 12; i++) blocks.add(new Faq(i));
+        for (int i = 0; i < 14; i++) blocks.add(new Faq(i));
         blocks.add(new Footer());
     }
 
@@ -166,7 +168,8 @@ public class WikiScreen extends Screen {
     private List<MobGroup> order() {
         List<MobGroup> l = new ArrayList<>();
         for (MobGroup g : MobGroup.values()) if (g.hostile) l.add(g);
-        for (MobGroup g : MobGroup.values()) if (!g.hostile) l.add(g);
+        if (!l.contains(MobGroup.BOSS)) l.add(MobGroup.BOSS);
+        for (MobGroup g : MobGroup.values()) if (!g.hostile && g != MobGroup.BOSS) l.add(g);
         return l;
     }
 
@@ -325,11 +328,11 @@ public class WikiScreen extends Screen {
         int lh = 18, lw = Math.round(lh * (Ui.LOGO_W / (float) Ui.LOGO_H));
         Ui.logoAt(g, 10, 5, lw, lh);
 
-        String[] ids = {"top", "how", "mobs", "settle", "villagers", "absurd", "intel", "commands", "faq"};
+        String[] ids = {"top", "how", "mobs", "settle", "villagers", "events", "absurd", "intel", "commands", "faq"};
         int available = this.width - 46 - (lw + 20);
         int allWidth = 0;
         for (String id : ids) allWidth += font.width(Component.translatable("mobslearn.wiki.nav." + id)) + 14;
-        if (allWidth > available) ids = new String[]{"how", "mobs", "faq"};
+        if (allWidth > available) ids = new String[]{"how", "mobs", "events", "faq"};
         int compactWidth = 0;
         for (String id : ids) compactWidth += font.width(Component.translatable("mobslearn.wiki.nav." + id)) + 14;
         if (compactWidth > available) ids = new String[]{"mobs", "faq"};
@@ -1022,8 +1025,8 @@ public class WikiScreen extends Screen {
     }
 
     private class Commands extends Block {
-        private final String[] lines = {"/mobslearn info", "/mobslearn set zombie_digger 3", "/mobslearn maxall", "/mobslearn speed 10", "/mobslearn settlement zombie", "/mobslearn timewarp 100", "/mobslearn reset"};
-        private final String[] keys = {"info", "set", "maxall", "speed", "settlement", "timewarp", "reset"};
+        private final String[] lines = {"/mobslearn info", "/mobslearn set zombie_digger 3", "/mobslearn maxall", "/mobslearn speed 10", "/mobslearn settlement zombie", "/mobslearn timewarp 100", "/mobslearn event march", "/mobslearn reset"};
+        private final String[] keys = {"info", "set", "maxall", "speed", "settlement", "timewarp", "event", "reset"};
 
         @Override
         int layout(int w) {

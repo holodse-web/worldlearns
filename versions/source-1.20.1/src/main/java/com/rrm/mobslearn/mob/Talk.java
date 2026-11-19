@@ -1,11 +1,14 @@
 package com.rrm.mobslearn.mob;
 
 import com.rrm.mobslearn.learn.Milestones;
+import com.rrm.mobslearn.learn.MobGroup;
+import com.rrm.mobslearn.learn.WorldBrain;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
@@ -15,6 +18,8 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.gossip.GossipType;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.phys.Vec3;
@@ -23,9 +28,13 @@ public final class Talk {
     private Talk() {
     }
 
-    private static final Map<String, Integer> moods = new HashMap<>();
-    private static final Map<String, List<String[]>> history = new HashMap<>();
-    private static final Map<String, Long> cooldowns = new HashMap<>();
+    private static final Map<UUID, Long> cooldowns = new HashMap<>();
+    private static final Map<DialogueMemory.Pair, Object> pending = new HashMap<>();
+
+    public static void reset() {
+        cooldowns.clear();
+        pending.clear();
+    }
 
     public static Component line(Entity speaker, Component text) {
         return Component.empty().append(Component.literal("[").append(speaker.getDisplayName()).append("] ").withStyle(ChatFormatting.GOLD))
@@ -42,51 +51,44 @@ public final class Talk {
     }
 
     public static int mood(Villager v, ServerPlayer p) {
-        return moods.getOrDefault(v.getUUID() + "|" + p.getUUID(), 0);
+        return DialogueMemory.mood(pair(v, p));
     }
 
-    private static int shift(Villager v, ServerPlayer p, int delta) {
-        String key = v.getUUID() + "|" + p.getUUID();
-        int m = Math.max(-10, Math.min(10, moods.getOrDefault(key, 0) + delta));
-        moods.put(key, m);
-        if (moods.size() > 4096) moods.clear();
-        return m;
+    private static DialogueMemory.Pair pair(Mob mob, ServerPlayer player) {
+        return new DialogueMemory.Pair(mob.getUUID(), player.getUUID());
     }
 
-    public static Villager addressee(ServerPlayer p, String text) {
+    private static Mob addressee(ServerPlayer p, String text) {
         ServerLevel level = (ServerLevel) p.level();
-        List<Villager> near = level.getEntitiesOfClass(Villager.class, p.getBoundingBox().inflate(10));
+        List<Mob> near = level.getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(10),
+            mob -> mob.isAlive() && species(mob) != null && (!(mob instanceof Villager v) || !v.isSleeping()));
         String lower = text.toLowerCase(Locale.ROOT);
-        Villager best = null;
+        Mob named = null, best = null, closestVillager = null;
+        double namedDistance = 10, villagerDistance = 6.5;
         double bestScore = -1;
         Vec3 eye = p.getEyePosition(), look = p.getViewVector(1f);
-        for (Villager v : near) {
-            if (!v.isAlive() || v.isSleeping()) continue;
-            if (v.hasCustomName() && lower.contains(v.getCustomName().getString().toLowerCase(Locale.ROOT))) return v;
-            Vec3 to = v.getEyePosition().subtract(eye);
+        for (Mob mob : near) {
+            Vec3 to = mob.getEyePosition().subtract(eye);
             double d = to.length();
-            if (d < 0.1 || d > 10) continue;
+            if (d < 0.1 || d > 10 || !p.hasLineOfSight(mob)) continue;
+            if (mob.hasCustomName() && d < namedDistance && lower.contains(mob.getCustomName().getString().toLowerCase(Locale.ROOT))) {
+                named = mob;
+                namedDistance = d;
+            }
+            if (mob instanceof Villager v && !v.isBaby() && d < villagerDistance) {
+                closestVillager = v;
+                villagerDistance = d;
+            }
             double cos = look.dot(to.normalize());
             double need = d < 3 ? 0.8 : 0.92;
-            if (cos < need || !p.hasLineOfSight(v)) continue;
+            if (cos < need) continue;
             double score = cos - d * 0.01;
             if (score > bestScore) {
                 bestScore = score;
-                best = v;
+                best = mob;
             }
         }
-        if (best == null) {
-            double bd = 6.5;
-            for (Villager v : near) {
-                if (!v.isAlive() || v.isSleeping() || v.isBaby()) continue;
-                double d = v.distanceTo(p);
-                if (d < bd && p.hasLineOfSight(v)) {
-                    bd = d;
-                    best = v;
-                }
-            }
-        }
-        return best;
+        return named != null ? named : best != null ? best : closestVillager;
     }
 
     private static final String[] CROWD = {"жители", "жителі", "народ", "люди", "ребята", "селяне", "мужики", "всем", "усім", "всім", "villagers",
@@ -98,17 +100,15 @@ public final class Talk {
         return false;
     }
 
-    public static boolean converse(ServerPlayer p, String text) {
-        if (p.isSpectator()) return false;
+    public static Mob converse(ServerPlayer p, String text) {
+        if (p.isSpectator()) return null;
+        ServerLevel level = (ServerLevel) p.level();
+        long t = level.getServer().overworld().getGameTime();
         if (crowd(text)) {
-            ServerLevel level = (ServerLevel) p.level();
             List<Villager> near = level.getEntitiesOfClass(Villager.class, p.getBoundingBox().inflate(14, 6, 14), v -> v.isAlive() && !v.isSleeping() && !v.isBaby());
             near.sort(java.util.Comparator.comparingDouble(v -> v.distanceToSqr(p)));
             if (near.size() >= 2) {
-                long t = level.getGameTime();
-                Long last = cooldowns.get(p.getUUID().toString());
-                if (last != null && t - last < 30) return true;
-                cooldowns.put(p.getUUID().toString(), t);
+                if (coolingDown(p, t)) return near.get(0);
                 int n = Math.min(near.size(), 2 + level.getRandom().nextInt(3));
                 for (int i = 0; i < n; i++) {
                     Villager v = near.get(i);
@@ -116,47 +116,62 @@ public final class Talk {
                     v.getNavigation().stop();
                     Behaviors.later(10 + i * 22 + level.getRandom().nextInt(10), () -> rule(level, v, p, text));
                 }
-                return true;
+                return near.get(0);
             }
         }
-        Villager v = addressee(p, text);
-        if (v == null) return false;
-        ServerLevel level = (ServerLevel) p.level();
-        long t = level.getGameTime();
-        String ck = p.getUUID().toString();
-        Long last = cooldowns.get(ck);
-        if (last != null && t - last < 30) return true;
-        cooldowns.put(ck, t);
-        if (cooldowns.size() > 2048) cooldowns.clear();
-        v.getLookControl().setLookAt(p, 30f, 30f);
-        v.getNavigation().stop();
-        String key = v.getUUID() + "|" + p.getUUID();
-        List<String[]> log = history.computeIfAbsent(key, k -> new ArrayList<>());
-        if (history.size() > 1024) history.clear();
-        if (AiChat.ready()) {
-            String said = text;
-            AiChat.ask(level.getServer(), system(v, p), log, said, reply -> {
-                if (!v.isAlive()) return;
-                int delta = AiChat.moodOf(reply);
-                String clean = AiChat.clean(reply);
-                if (clean.isEmpty()) {
-                    rule(level, v, p, said);
-                    return;
-                }
-                remember(log, said, clean);
-                react(level, v, p, delta, clean);
-            }, () -> rule(level, v, p, said));
-            level.sendParticles(ParticleTypes.NOTE, v.getX(), v.getY() + 2.3, v.getZ(), 1, 0, 0, 0, 0.5);
-            return true;
+        Mob mob = addressee(p, text);
+        if (mob == null) return null;
+        if (coolingDown(p, t)) return mob;
+        if (mob.getTarget() == null) {
+            mob.getLookControl().setLookAt(p, 30f, 30f);
+            mob.getNavigation().stop();
         }
-        Behaviors.later(12 + level.getRandom().nextInt(16), () -> rule(level, v, p, text));
-        return true;
+        DialogueMemory.Pair pair = pair(mob, p);
+        if (pending.containsKey(pair)) return mob;
+        if (recallRequested(text)) {
+            recall(p, mob, pair);
+        } else if (mob instanceof Villager villager && AiChat.ready()) {
+            Object request = new Object();
+            pending.put(pair, request);
+            AiChat.ask(level.getServer(), system(villager, p), DialogueMemory.aiHistory(pair), text, reply -> {
+                if (!pending.remove(pair, request) || !canReply(level, villager, p)) return;
+                String clean = AiChat.clean(reply);
+                if (clean.isEmpty()) rule(level, villager, p, text);
+                else react(level, villager, p, text, AiChat.moodOf(reply), clean);
+            }, () -> {
+                if (pending.remove(pair, request)) rule(level, villager, p, text);
+            });
+            level.sendParticles(ParticleTypes.NOTE, villager.getX(), villager.getY() + 2.3, villager.getZ(), 1, 0, 0, 0, 0.5);
+        } else {
+            Behaviors.later(12 + level.getRandom().nextInt(16), () -> rule(level, mob, p, text));
+        }
+        return mob;
     }
 
-    private static void remember(List<String[]> log, String user, String reply) {
-        log.add(new String[]{"user", user});
-        log.add(new String[]{"assistant", reply});
-        while (log.size() > 8) log.remove(0);
+    private static boolean coolingDown(ServerPlayer player, long tick) {
+        Long last = cooldowns.get(player.getUUID());
+        if (last != null && tick - last < 30) return true;
+        if (cooldowns.size() >= 2048) cooldowns.values().removeIf(previous -> tick - previous >= 30);
+        cooldowns.put(player.getUUID(), tick);
+        return false;
+    }
+
+    private static boolean canReply(ServerLevel level, Mob mob, ServerPlayer player) {
+        return WorldBrain.get().enabled && mob.isAlive() && player.isAlive() && player.level() == level && mob.distanceTo(player) < 24;
+    }
+
+    private static final String[] RECALL = {"помнишь", "помните", "вспомни", "пам'ятаєш", "пам’ятаєш", "пригадай", "remember", "recall",
+        "erinnerst du", "weißt du noch", "tu te souviens", "souviens-toi", "recuerdas", "te acuerdas", "acuérdate"};
+
+    private static boolean recallRequested(String text) {
+        return phrase(text.toLowerCase(Locale.ROOT), RECALL);
+    }
+
+    private static void recall(ServerPlayer player, Mob mob, DialogueMemory.Pair pair) {
+        DialogueMemory.Exchange previous = DialogueMemory.last(pair);
+        Component reply = previous == null ? Component.translatable("mobslearn.chat.recall_empty")
+            : Component.translatable("mobslearn.chat.recall", previous.message(), previous.reply());
+        sayTo(player, mob, reply);
     }
 
     private static String system(Villager v, ServerPlayer p) {
@@ -171,10 +186,13 @@ public final class Talk {
             + "End every reply with a tag [mood:N] where N is from -3 to 3: how this message changed your attitude.";
     }
 
-    private static void react(ServerLevel level, Villager v, ServerPlayer p, int delta, String text) {
-        int m = shift(v, p, delta);
+    private static void react(ServerLevel level, Villager v, ServerPlayer p, String said, int delta, String text) {
+        DialogueMemory.Pair pair = pair(v, p);
+        int m = DialogueMemory.shiftedMood(pair, delta);
+        Component reply = Component.literal(text);
+        DialogueMemory.remember(pair, m, said, reply, true);
         effects(level, v, p, delta, m);
-        say(level, v, Component.literal(text), 24);
+        say(level, v, reply, 24);
     }
 
     private static void effects(ServerLevel level, Villager v, ServerPlayer p, int delta, int mood) {
@@ -344,11 +362,12 @@ public final class Talk {
         return "other";
     }
 
-    private static void rule(ServerLevel level, Villager v, ServerPlayer p, String text) {
-        if (!v.isAlive() || !p.isAlive()) return;
+    private static void rule(ServerLevel level, Mob mob, ServerPlayer p, String text) {
+        if (!canReply(level, mob, p)) return;
         RandomSource r = level.getRandom();
         String intent = intent(text);
-        int before = mood(v, p);
+        DialogueMemory.Pair pair = pair(mob, p);
+        int before = DialogueMemory.mood(pair);
         int delta = switch (intent) {
             case "insult" -> -2;
             case "swear" -> -1;
@@ -357,7 +376,13 @@ public final class Talk {
             case "sorry" -> before < 0 ? 3 : 0;
             default -> 0;
         };
-        int after = shift(v, p, delta);
+        int after = DialogueMemory.shiftedMood(pair, delta);
+        if (!(mob instanceof Villager v)) {
+            Component reply = mobReply(mob, p, intent, after);
+            DialogueMemory.remember(pair, after, text, reply, false);
+            say(level, mob, reply, 24);
+            return;
+        }
         String pool = intent;
         if (intent.equals("insult") && after <= -5) pool = "insult_hard";
         else if (intent.equals("sorry") && before >= 0) pool = "sorry_none";
@@ -370,12 +395,30 @@ public final class Talk {
         } else {
             reply = Component.translatable("mobslearn.chat." + pool + "." + r.nextInt(POOLS.getOrDefault(pool, 3)), p.getName(), v.getDisplayName(), quote);
         }
-        if (com.rrm.mobslearn.learn.WorldBrain.levelAt("villager_tease", level, v.blockPosition()) <= 0 && r.nextFloat() < 0.6f) {
+        if (WorldBrain.levelAt("villager_tease", level, v.blockPosition()) <= 0 && r.nextFloat() < 0.6f) {
             reply = Component.translatable("mobslearn.chat.mumble." + r.nextInt(6)).append(reply);
         }
+        DialogueMemory.remember(pair, after, text, reply, false);
         effects(level, v, p, delta, after);
         say(level, v, reply, 24);
         if (intent.equals("help")) VillageDefense.offer(level, v, p);
         if (intent.equals("sorry")) Colonies.apologize(level, v, p);
+    }
+
+    private static Component mobReply(Mob mob, ServerPlayer player, String intent, int mood) {
+        String topic = switch (intent) {
+            case "name", "bye", "sorry", "insult", "swear", "thanks", "praise" -> intent;
+            default -> mood <= -3 ? "grumpy" : species(mob);
+        };
+        return Component.translatableWithFallback("mobslearn.chat.mob." + topic, "I hear you, %1$s.", player.getName(), mob.getDisplayName());
+    }
+
+    private static String species(Mob mob) {
+        var type = mob.getType();
+        if (type == EntityType.PIGLIN || type == EntityType.ZOMBIFIED_PIGLIN) return "piglin";
+        if (type == EntityType.BLAZE) return "blaze";
+        if (type == EntityType.WITHER_SKELETON) return "skeleton";
+        MobGroup group = MobGroup.of(type);
+        return group == null ? null : group.key();
     }
 }

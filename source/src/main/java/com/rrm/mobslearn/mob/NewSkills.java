@@ -42,7 +42,6 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
-/** The second wave of learned behaviours: sappers, cover-takers, door breakers, ceiling ambushers, burglars, healers and jokes. */
 public final class NewSkills {
     private static final String CEILING_TAG = "mobslearn.ceiling", FLOWER_TAG = "mobslearn.flower", GOODS_TAG = "mobslearn.goods";
 
@@ -78,13 +77,11 @@ public final class NewSkills {
         return true;
     }
 
-    /** Mobs in the middle of one of these behaviours keep the full tick rate and are not treated as having "lost" their target. */
     public static boolean busy(Mob m) {
         UUID id = m.getUUID();
         return ceiling.containsKey(id) || hiding.containsKey(id) || dropping.containsKey(id);
     }
 
-    /** Skills that only make sense for a particular entity type inside a group should not take a trait slot elsewhere. */
     public static boolean applies(Skill s, Mob mob) {
         if (s.id().equals("drowned_ashore")) return mob.getType() == EntityTypes.DROWNED;
         if (s.id().equals("zombie_merchant")) return mob.getType() == EntityTypes.ZOMBIE || mob.getType() == EntityTypes.HUSK;
@@ -146,8 +143,6 @@ public final class NewSkills {
         }
     }
 
-    // --- Creeper sapper: blows a hole in the wall of a shelter the player hides in -------------------------------------------
-
     private static void sapper(ServerLevel level, Creeper cr, Player target, int lvl, long t) {
         if (!griefing(level) || cr.isIgnited() || t % 20 != 0) return;
         double dist = cr.distanceTo(target);
@@ -170,8 +165,6 @@ public final class NewSkills {
         }
     }
 
-    // --- Creeper sneeze: a tiny harmless-ish pop --------------------------------------------------------------------------
-
     private static void sneeze(ServerLevel level, Creeper cr, int lvl, long t, RandomSource r) {
         if (t % 20 != 0 || cr.isIgnited() || r.nextFloat() > 0.012f * lvl) return;
         Player near = level.getNearestPlayer(cr, 16);
@@ -188,8 +181,6 @@ public final class NewSkills {
             }
         });
     }
-
-    // --- Skeleton cover: duck behind a block, then peek out and shoot -------------------------------------------------------
 
     private static void cover(ServerLevel level, Mob mob, Player target, int lvl, long t, RandomSource r) {
         UUID id = mob.getUUID();
@@ -233,8 +224,6 @@ public final class NewSkills {
         mob.setTarget(null);
         mob.getNavigation().moveTo(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, 1.2 + 0.05 * lvl);
     }
-
-    // --- Zombie door breaker ----------------------------------------------------------------------------------------------
 
     private static void breakDoor(ServerLevel level, Mob mob, Player target, int lvl) {
         if (!griefing(level)) return;
@@ -280,8 +269,6 @@ public final class NewSkills {
         }
     }
 
-    // --- Drowned that follow you ashore -----------------------------------------------------------------------------------
-
     private static void ashore(ServerLevel level, Mob mob, Player target, int lvl, long t) {
         if (t % 10 != 0) return;
         Player p = target;
@@ -296,8 +283,6 @@ public final class NewSkills {
         mob.getNavigation().moveTo(p, 1.0 + 0.1 * lvl);
         if (mob.distanceTo(p) < 2.0 && cooldown("ashorehit" + mob.getUUID(), t, 20)) Combat.critHit(level, mob, p, 1.0);
     }
-
-    // --- Spider ceiling ambush --------------------------------------------------------------------------------------------
 
     private static void release(Mob mob) {
         ceiling.remove(mob.getUUID());
@@ -365,8 +350,6 @@ public final class NewSkills {
         }
     }
 
-    // --- Enderman burglar: pinches blocks out of player builds ------------------------------------------------------------
-
     public static void playerPlaced(ServerLevel level, BlockPos pos) {
         LinkedHashSet<Long> set = built.computeIfAbsent(level.dimension().toString(), k -> new LinkedHashSet<>());
         set.add(pos.asLong());
@@ -420,8 +403,6 @@ public final class NewSkills {
         }
     }
 
-    // --- Witch healer: patches up nearby monsters -------------------------------------------------------------------------
-
     private static void heal(ServerLevel level, Mob witch, int lvl, long t) {
         if (t % 20 != 0 || !cooldown("witchheal" + witch.getUUID(), t, 100 - 15L * lvl)) return;
         LivingEntity best = null;
@@ -445,8 +426,6 @@ public final class NewSkills {
         level.sendParticles(ParticleTypes.HEART, best.getX(), best.getY() + best.getBbHeight() + 0.2, best.getZ(), 3 + lvl, 0.3, 0.2, 0.3, 0.0);
         level.sendParticles(ParticleTypes.HAPPY_VILLAGER, best.getX(), best.getY() + 0.8, best.getZ(), 10, 0.4, 0.5, 0.4, 0.0);
     }
-
-    // --- Phantom hunter: swoops in from the side when you hide under a roof -----------------------------------------------
 
     private static void phantom(ServerLevel level, Mob ph, Player target, int lvl, long t) {
         Vec3 eye = target.getEyePosition();
@@ -473,8 +452,6 @@ public final class NewSkills {
             ph.setDeltaMovement(-v.x, 0.6, -v.z);
         }
     }
-
-    // --- Zombie merchant --------------------------------------------------------------------------------------------------
 
     private static final net.minecraft.world.item.Item[][] GOODS = {
         {Items.ROTTEN_FLESH, Items.POTATO, Items.CARROT, Items.STRING, Items.BONE, Items.STICK, Items.GLASS_BOTTLE, Items.BREAD},
@@ -532,14 +509,12 @@ public final class NewSkills {
         return InteractionResult.SUCCESS;
     }
 
-    /** A zombie that is still in business does not attack customers (unless they hit it first). */
     public static boolean refusesTarget(Mob m, LivingEntity target) {
         return target instanceof Player p && merchant(m) && m.getLastHurtByMob() != p;
     }
 
-    // --- Skeleton flowers: some arrows turn into a bouquet ----------------------------------------------------------------
-
     public static void onEntityLoad(Entity e, ServerLevel level) {
+        Saga.onEntityLoad(e, level);
         if (e instanceof Mob mob && mob.entityTags().contains(CEILING_TAG) && !ceiling.containsKey(mob.getUUID())) {
             mob.setNoGravity(false);
             mob.removeTag(CEILING_TAG);
@@ -552,7 +527,6 @@ public final class NewSkills {
     private static final net.minecraft.world.item.Item[] FLOWERS = {Items.POPPY, Items.DANDELION, Items.CORNFLOWER, Items.AZURE_BLUET,
         Items.OXEYE_DAISY, Items.ALLIUM, Items.BLUE_ORCHID, Items.LILY_OF_THE_VALLEY};
 
-    /** @return true when the hit was a flower arrow (damage must be cancelled). */
     public static boolean flowerHit(LivingEntity victim, Entity direct) {
         if (direct == null || !direct.entityTags().contains(FLOWER_TAG) || !(victim.level() instanceof ServerLevel level)) return false;
         RandomSource r = level.getRandom();

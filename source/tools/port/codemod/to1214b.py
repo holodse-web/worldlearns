@@ -9,6 +9,7 @@ R = [
     (r'MobEffects\.SLOWNESS\b', 'MobEffects.MOVEMENT_SLOWDOWN'),
     (r'MobEffects\.RESISTANCE\b', 'MobEffects.DAMAGE_RESISTANCE'),
     (r'MobEffects\.NAUSEA\b', 'MobEffects.CONFUSION'),
+    (r'MobEffects\.MINING_FATIGUE\b', 'MobEffects.DIG_SLOWDOWN'),
     (r'\.gui\.setScreen\(', '.setScreen('),
     (r'\.gui\.screen\(\)', '.screen'),
     (r'\bEnderman\b', 'EnderMan'),

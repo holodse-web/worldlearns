@@ -71,6 +71,8 @@ import net.minecraft.world.phys.AABB;
 public final class Colonies {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final long TIER_TIME = 240000, PEACE_TIME = 48000, HOUSE_TIME = 72000, DAUGHTER_TIME = 240000;
+    static final int DEVELOPMENT_RANGE = 160;
+    static final double DISTANT_DEVELOPMENT = 0.2;
     private static final String HOME = "mobslearn.home.";
     private static final String CHIEF = "mobslearn.chief";
 
@@ -84,7 +86,7 @@ public final class Colonies {
         transient List<UUID> sortie = new ArrayList<>();
         transient long sortieUntil, nextSortie, nextSeed, nextArrival;
         transient boolean chiefAlive, retreating;
-        long lastSeen, lastClock, lastExtra, lastBirth;
+        long lastExtra, lastBirth;
         int wood = 30;
         int woodKind = -1;
         transient long chiefDeadTick, nextBirth, nextRepair;
@@ -96,7 +98,10 @@ public final class Colonies {
         transient boolean bellRung;
         transient BlockPos raidPos;
         transient long raidUntil, nextSpawn, nextRaid, nextVillageRaid, nextSocial, fairUntil;
-        transient int population;
+        int population;
+        int reserve = -1;
+        long lastReserve;
+        java.util.Map<String, Long> provoked = new java.util.HashMap<>();
 
         BlockPos center() {
             return new BlockPos(x, y, z);
@@ -119,6 +124,10 @@ public final class Colonies {
         return warp * 2;
     }
 
+    static double developmentSpeed() {
+        return speed() * WorldBrain.get().settlementSpeed;
+    }
+
     public static float buildFactor(ServerLevel level, String colonyId) {
         Colony c = byId(colonyId);
         if (c == null || hostile(c.kind)) return 1f;
@@ -137,6 +146,7 @@ public final class Colonies {
     }
 
     private static void helpPoint(ServerLevel level, ServerPlayer p, BlockPos where) {
+        Allies.helped(level, p, where);
         int n = helped.merge(p.getUUID(), 1, Integer::sum);
         dirty = true;
         if (n < HERO_NEEDS) {
@@ -232,8 +242,6 @@ public final class Colonies {
                 c.attacker = j.has("attacker") ? j.get("attacker").getAsString() : null;
                 c.camp = bool(j, "camp");
                 c.lastDaughter = numL(j, "lastDaughter", 0);
-                c.lastSeen = numL(j, "lastSeen", 0);
-                c.lastClock = numL(j, "lastClock", 0);
                 c.lastExtra = numL(j, "lastExtra", 0);
                 c.wood = num(j, "wood", 30);
                 c.woodKind = num(j, "woodKind2", -1);
@@ -243,13 +251,17 @@ public final class Colonies {
                 c.pz = num(j, "pz", 0);
                 c.big = j.has("big") && j.get("big").getAsBoolean();
                 c.hasPartner = j.has("hasPartner") && j.get("hasPartner").getAsBoolean();
+                c.population = num(j, "population", 0);
+                c.reserve = num(j, "reserve", -1);
+                c.lastReserve = numL(j, "lastReserve", 0);
+                if (j.has("provoked")) for (var pe : j.getAsJsonObject("provoked").entrySet()) c.provoked.put(pe.getKey(), pe.getValue().getAsLong());
                 if (j.has("known")) for (JsonElement k : j.getAsJsonArray("known")) c.known.add(k.getAsString());
                 if (j.has("hidden")) for (JsonElement k : j.getAsJsonArray("hidden")) c.hidden.add(k.getAsString());
                 if (j.has("grudges")) for (var ge : j.getAsJsonObject("grudges").entrySet()) c.grudges.put(ge.getKey(), ge.getValue().getAsInt());
                 colonies.add(c);
             }
         } catch (Exception e) {
-            MobsLearn.LOG.error("[MobsLearn] Failed to read colonies", e);
+            MobsLearn.LOG.error("Can't read colonies", e);
         }
     }
 
@@ -305,8 +317,6 @@ public final class Colonies {
                 if (c.attacker != null) o.addProperty("attacker", c.attacker);
                 o.addProperty("camp", c.camp);
                 o.addProperty("lastDaughter", c.lastDaughter);
-                o.addProperty("lastSeen", c.lastSeen);
-                o.addProperty("lastClock", c.lastClock);
                 o.addProperty("lastExtra", c.lastExtra);
                 o.addProperty("wood", c.wood);
                 o.addProperty("woodKind2", c.woodKind);
@@ -316,6 +326,12 @@ public final class Colonies {
                 o.addProperty("pz", c.pz);
                 o.addProperty("big", c.big);
                 o.addProperty("hasPartner", c.hasPartner);
+                o.addProperty("population", c.population);
+                o.addProperty("reserve", c.reserve);
+                o.addProperty("lastReserve", c.lastReserve);
+                JsonObject pv = new JsonObject();
+                for (var e : c.provoked.entrySet()) pv.addProperty(e.getKey(), e.getValue());
+                o.add("provoked", pv);
                 JsonArray known = new JsonArray();
                 for (String k : c.known) known.add(k);
                 o.add("known", known);
@@ -369,7 +385,7 @@ public final class Colonies {
             Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
             dirty = false;
         } catch (Exception e) {
-            MobsLearn.LOG.error("[MobsLearn] Failed to save colonies", e);
+            MobsLearn.LOG.error("Can't save colonies", e);
         }
     }
 
@@ -381,12 +397,39 @@ public final class Colonies {
         return !kind.equals("village");
     }
 
-    private static MobGroup crewGroup(String kind) {
+    public static boolean allowsKind(String kind) {
+        if (!WorldBrain.get().settlements) return false;
+        return !"village".equals(kind) || WorldBrain.get().villages;
+    }
+
+    public static boolean allowsProject(String colonyId) {
+        Colony c = byId(colonyId);
+        return c == null || allowsKind(c.kind);
+    }
+
+    static boolean newKind(String kind) {
+        return "pillager".equals(kind) || "witch".equals(kind) || "nether".equals(kind) || "enderman".equals(kind);
+    }
+
+    public static boolean suitableDimension(ServerLevel level, String kind) {
         return switch (kind) {
-            case "skeleton" -> MobGroup.SKELETON;
-            case "creeper" -> MobGroup.CREEPER;
-            case "village" -> MobGroup.VILLAGER;
-            default -> MobGroup.ZOMBIE;
+            case "nether" -> level.dimension().equals(Level.NETHER);
+            case "enderman" -> level.dimension().equals(Level.END);
+            case "pillager", "witch" -> level.dimension().equals(Level.OVERWORLD);
+            default -> true;
+        };
+    }
+
+    static boolean isBuilder(Mob mob, String colony, String crew) {
+        Colony home = homeOf(mob);
+        if (home == null || !home.id.equals(colony)) return false;
+        var type = mob.getType();
+        return switch (crew) {
+            case "pillager" -> MobGroup.PILLAGER.contains(type);
+            case "witch" -> type == EntityType.WITCH;
+            case "nether" -> type == EntityType.PIGLIN || type == EntityType.BLAZE || type == EntityType.WITHER_SKELETON;
+            case "enderman" -> type == EntityType.ENDERMAN;
+            default -> false;
         };
     }
 
@@ -398,6 +441,7 @@ public final class Colonies {
         return switch (kind) {
             case "skeleton" -> "skeleton";
             case "creeper" -> "cgrove";
+            case "pillager", "witch", "nether", "enderman" -> kind;
             default -> "zombie";
         };
     }
@@ -406,6 +450,7 @@ public final class Colonies {
         return switch (kind) {
             case "skeleton" -> "shouse";
             case "creeper" -> "cnest";
+            case "pillager", "witch", "nether", "enderman" -> kind + "_home";
             default -> "zhouse";
         };
     }
@@ -427,7 +472,8 @@ public final class Colonies {
         Colony best = null;
         double bestD = radius * radius;
         for (Colony c : colonies) {
-            if (c.pending || !c.dim.equals(dim) || (kind != null && !c.kind.equals(kind)) || (activeOnly && !c.active())) continue;
+            if (!allowsKind(c.kind) || c.pending || !c.dim.equals(dim) || (kind != null && !c.kind.equals(kind))
+                || (activeOnly && !c.active())) continue;
             double d = pos.distSqr(c.center());
             if (d <= bestD) {
                 bestD = d;
@@ -453,7 +499,7 @@ public final class Colonies {
         Colony best = null;
         double bd = Double.MAX_VALUE;
         for (Colony c : colonies) {
-            if (c.pending || !c.dim.equals(dim)) continue;
+            if (!allowsKind(c.kind) || c.pending || !c.dim.equals(dim)) continue;
             double d = p.distanceToSqr(c.x, c.y, c.z);
             if (d < bd) {
                 bd = d;
@@ -473,6 +519,10 @@ public final class Colonies {
         if (key.endsWith("skeleton")) return "skeleton_skull";
         if (key.endsWith("creeper")) return "creeper_head";
         if (key.endsWith("zombie")) return "zombie_head";
+        if (key.endsWith("pillager")) return "pillager_spawn_egg";
+        if (key.endsWith("witch")) return "witch_spawn_egg";
+        if (key.endsWith("nether")) return "magma_cream";
+        if (key.endsWith("enderman")) return "enderman_spawn_egg";
         return "writable_book";
     }
 
@@ -512,11 +562,16 @@ public final class Colonies {
     }
 
     public static boolean canSettle(ServerLevel level, String kind, BlockPos pos) {
-        return !hostile(kind) || WorldBrain.levelAt(buildSkill(kind), level, pos) > 0;
+        return allowsKind(kind) && suitableDimension(level, kind)
+            && (newKind(kind) || !hostile(kind) || WorldBrain.levelAt(buildSkill(kind), level, pos) > 0);
     }
 
     private static Colony create(ServerLevel level, BlockPos pos, String kind, boolean natural, int tier, boolean force) {
-        if (!force && near(level, pos, null, natural ? 140 : 48, false) != null) return null;
+        return create(level, pos, kind, natural, tier, force, false);
+    }
+
+    private static Colony create(ServerLevel level, BlockPos pos, String kind, boolean natural, int tier, boolean force, boolean generated) {
+        if (!allowsKind(kind) || !suitableDimension(level, kind) || (!force && near(level, pos, null, natural ? 140 : 48, false) != null)) return null;
         if (!force && natural && !canSettle(level, kind, pos)) return null;
         Colony c = new Colony();
         c.id = Long.toString(System.nanoTime() & 0xFFFFFFFFFFL, 36) + Integer.toString(level.getRandom().nextInt(1296), 36);
@@ -526,46 +581,70 @@ public final class Colonies {
         c.y = pos.getY();
         c.z = pos.getZ();
         c.natural = natural;
-        c.tier = tier;
+        c.tier = generated ? Math.min(tier, maxTier(level, c)) : tier;
+        if (generated && c.tier > 0) {
+            c.age = c.lastTier = c.tier * TIER_TIME;
+            c.extraHouses = level.getRandom().nextInt(3);
+        }
         colonies.add(c);
         dirty = true;
-        queue(level, c);
+        if (generated) {
+            scanWood(level, c);
+            queueCore(level, c);
+            Camps.instantBuildCore(level, c.id, coreOf(c), pos);
+        } else queue(level, c);
         if (hostile(kind)) {
-            for (int i = 0; i < (natural ? 1 : 2); i++) spawnResident(level, c, pos.offset(i * 2 - 1, 0, -4));
+            int residents = newKind(kind) ? 3 : natural ? 1 : 2;
+            for (int i = 0; i < residents; i++) {
+                spawnResident(level, c, pos.offset(i * 2 - residents + 1, 0, -4), newKind(kind) ? i : -1);
+            }
             c.nextSpawn = level.getGameTime() + 1200 / warp;
-        } else if (!natural) {
-            if (level.getBlockState(pos).canBeReplaced()) level.setBlockAndUpdate(pos, Blocks.BELL.defaultBlockState());
-            for (int i = 0; i < 3; i++) {
+        } else if (!natural || generated) {
+            BlockPos bell = generated ? pos.north(5).atY(Camps.groundY(level, pos.getX(), pos.getZ() - 5)) : pos;
+            if (level.getBlockState(bell).canBeReplaced()) level.setBlockAndUpdate(bell, Blocks.BELL.defaultBlockState());
+            for (int i = 0; i < 3 + c.tier; i++) {
                 Villager v = EntityType.VILLAGER.create(level);
                 if (v == null) continue;
-                v.moveTo(pos.getX() + 2.5 - i * 2, pos.getY(), pos.getZ() + 2.5, level.getRandom().nextFloat() * 360f, 0f);
+                BlockPos at = pos.offset(2 - i % 3 * 2, 0, generated ? 6 + i / 3 * 2 : 2);
+                int y = generated ? Camps.groundY(level, at.getX(), at.getZ()) : pos.getY();
+                v.moveTo(at.getX() + 0.5, y, at.getZ() + 0.5, level.getRandom().nextFloat() * 360f, 0f);
                 if (i == 2) v.setBaby(true);
                 level.addFreshEntity(v);
             }
         }
-        tell(level, pos, 96, Component.translatable("mobslearn.colony.found." + kind));
+        if (generated) {
+            queue(level, c);
+            Camps.keepProjectsVisible(c.id);
+        }
+        tell(level, pos, 96, newKind(kind) ? Component.translatable("mobslearn.colony.found.faction", kindName(c))
+            : Component.translatable("mobslearn.colony.found." + kind));
         if (hostile(kind)) awardNear(level, pos, 96, "colony_neighbors");
         return c;
     }
 
     public static void chunkLoaded(ServerLevel level, net.minecraft.world.level.chunk.LevelChunk chunk, boolean generated) {
-        if (!generated || server == null || !WorldBrain.get().enabled || level.dimension() != Level.OVERWORLD || !Builders.griefing(level)) return;
+        if (!generated || server == null || !WorldBrain.get().enabled || !Builders.griefing(level)) return;
+        boolean overworld = level.dimension().equals(Level.OVERWORLD), nether = level.dimension().equals(Level.NETHER), end = level.dimension().equals(Level.END);
+        if (!overworld && !nether && !end) return;
         RandomSource r = level.getRandom();
-        if (r.nextInt(350) != 0) return;
+        if (r.nextInt(overworld ? 350 : 180) != 0) return;
         int x = chunk.getPos().getMiddleBlockX(), z = chunk.getPos().getMiddleBlockZ();
+        if (end && Math.abs(x) < 192 && Math.abs(z) < 192) return;
         String dim = dimId(level);
         for (Colony o : colonies) {
-            if (o.dim.equals(dim) && Math.abs(o.x - x) < 220 && Math.abs(o.z - z) < 220) return;
+            if (allowsKind(o.kind) && o.dim.equals(dim) && Math.abs(o.x - x) < 220 && Math.abs(o.z - z) < 220) return;
         }
         float f = r.nextFloat();
-        String kind = f < 0.4f ? "village" : f < 0.8f ? "zombie" : f < 0.92f ? "skeleton" : "creeper";
+        String kind = nether ? "nether" : end ? "enderman" : f < 0.33f ? "village" : f < 0.62f ? "zombie" : f < 0.74f ? "skeleton"
+            : f < 0.8f ? "creeper" : f < 0.92f ? "pillager" : "witch";
+        if (!allowsKind(kind)) return;
         Colony seed = new Colony();
         seed.id = Long.toString(System.nanoTime() & 0xFFFFFFFFFFL, 36) + "n";
         seed.kind = kind;
         seed.dim = dim;
         seed.x = x;
         seed.z = z;
-        seed.y = level.getSeaLevel();
+        seed.y = nether ? 48 : level.getSeaLevel();
         seed.tier = kind.equals("village") ? r.nextInt(4) : 1 + r.nextInt(3);
         seed.natural = true;
         seed.pending = true;
@@ -581,6 +660,7 @@ public final class Colonies {
     private static BlockPos townSite(ServerLevel level, BlockPos near, int search, int radius) {
         BlockPos best = null;
         int bestScore = Integer.MAX_VALUE;
+        boolean nether = level.dimension().equals(Level.NETHER);
         for (int cx = -search; cx <= search; cx += 8) {
             for (int cz = -search; cz <= search; cz += 8) {
                 int x = near.getX() + cx, z = near.getZ() + cz;
@@ -588,19 +668,26 @@ public final class Colonies {
                 int min = Integer.MAX_VALUE, max = Integer.MIN_VALUE, wet = 0;
                 for (int sx = -radius; sx <= radius; sx += 4) {
                     for (int sz = -radius; sz <= radius; sz += 4) {
-                        int h = Camps.groundY(level, x + sx, z + sz);
+                        int h = Camps.groundY(level, x + sx, z + sz, near.getY(), 8);
+                        if (h == Integer.MIN_VALUE) {
+                            wet += 10;
+                            continue;
+                        }
                         min = Math.min(min, h);
                         max = Math.max(max, h);
                         BlockState gs = level.getBlockState(new BlockPos(x + sx, h - 1, z + sz));
                         if (!gs.getFluidState().isEmpty()) wet++;
                         else if (!(gs.is(BlockTags.DIRT) || gs.is(BlockTags.SAND) || gs.is(BlockTags.BASE_STONE_OVERWORLD) || gs.is(Blocks.GRAVEL)
-                            || gs.is(Blocks.SNOW_BLOCK) || gs.is(Blocks.SNOW) || gs.is(BlockTags.TERRACOTTA) || gs.is(BlockTags.LEAVES) || gs.is(BlockTags.LOGS))) wet += 10;
+                            || gs.is(Blocks.SNOW_BLOCK) || gs.is(Blocks.SNOW) || gs.is(BlockTags.TERRACOTTA) || gs.is(BlockTags.LEAVES) || gs.is(BlockTags.LOGS)
+                            || gs.is(Blocks.END_STONE) || (nether && Camps.natural(gs)))) wet += 10;
                     }
                 }
                 int score = (max - min) * 4 + wet * 6;
-                if (max - min <= 4 && wet <= 2 && score < bestScore && near(level, new BlockPos(x, min, z), null, 120, false) == null) {
+                int y = Camps.groundY(level, x, z, near.getY(), 8);
+                if (y != Integer.MIN_VALUE && max - min <= 4 && wet <= 2 && score < bestScore
+                    && near(level, new BlockPos(x, min, z), null, 120, false) == null) {
                     bestScore = score;
-                    best = new BlockPos(x, Camps.groundY(level, x, z), z);
+                    best = new BlockPos(x, y, z);
                 }
             }
         }
@@ -628,6 +715,7 @@ public final class Colonies {
     private static int maxTier(ServerLevel level, Colony c) {
         if (c.camp) return 0;
         if (!c.natural) return c.big ? 8 : 6;
+        if (newKind(c.kind)) return c.big ? 8 : 6;
         String skill = buildSkill(c.kind);
         int lvl = WorldBrain.levelAt(skill, level, c.center());
         if (c.kind.equals("village")) lvl += WorldBrain.levelAt("villager_tools", level, c.center());
@@ -652,24 +740,39 @@ public final class Colonies {
         if (colonies.isEmpty() || t % 100 != 0) return;
         String dim = dimId(level);
         if (t % 1200 == 0) seed(level, t);
+        long nearbyGain = Math.round(100 * developmentSpeed());
+        long distantGain = Math.round(100 * developmentSpeed() * DISTANT_DEVELOPMENT);
         for (Colony c : new ArrayList<>(colonies)) {
-            if (!c.dim.equals(dim)) continue;
-            BlockPos center = c.center();
-            if (!level.isLoaded(center) || level.getNearestPlayer(c.x, c.y, c.z, 160, false) == null) continue;
+            if (!c.dim.equals(dim) || !allowsKind(c.kind)) continue;
+            boolean loaded = level.isLoaded(c.center());
+            boolean nearby = loaded && level.getNearestPlayer(c.x, c.y, c.z, DEVELOPMENT_RANGE, false) != null;
             try {
-                if (c.pending) settle(level, c);
-                else update(level, c, t);
+                if (c.pending) {
+                    if (nearby) settle(level, c);
+                    continue;
+                }
+                if (c.active()) {
+                    long gain = nearby ? nearbyGain : distantGain;
+                    c.age += gain;
+                    if (hostile(c.kind)) c.peace += gain;
+                    dirty = true;
+                }
+                if (nearby) update(level, c, t);
+                else if (loaded && c.active() && t % 600 == 0) grow(level, c, t, false);
             } catch (Exception e) {
-                MobsLearn.LOG.warn("[MobsLearn] colony update failed", e);
+                MobsLearn.LOG.warn("Colony tick failed", e);
             }
         }
         if (t % 1200 == 0) save();
     }
 
     private static void settle(ServerLevel level, Colony c) {
-        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, c.x, c.z);
-        BlockPos site = townSite(level, new BlockPos(c.x, y, c.z), 40, 10);
-        if (site != null && hostile(c.kind) && nearVillage(level, site, 80)) {
+        if (!Builders.griefing(level)) return;
+        boolean nether = c.kind.equals("nether");
+        Player player = nether ? level.getNearestPlayer(c.x, c.y, c.z, DEVELOPMENT_RANGE, false) : null;
+        int y = nether ? player == null ? c.y : player.getBlockY() : level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, c.x, c.z);
+        BlockPos site = townSite(level, new BlockPos(c.x, y, c.z), 40, nether ? 6 : 10);
+        if (site != null && hostile(c.kind) && level.dimension().equals(Level.OVERWORLD) && nearVillage(level, site, 80)) {
             BlockPos moved = null;
             for (int i = 0; i < 4 && moved == null; i++) {
                 double a = i * Math.PI / 2 + level.getRandom().nextDouble();
@@ -681,28 +784,7 @@ public final class Colonies {
         colonies.remove(c);
         dirty = true;
         if (site == null) return;
-        Colony made = create(level, site, c.kind, true, 0, false);
-        if (made != null) made.lastSeen = c.lastSeen > 0 ? c.lastSeen : level.getGameTime();
-        if (made != null && c.tier > 0) {
-            made.tier = Math.min(c.tier, maxTier(level, made));
-            made.age = made.tier * TIER_TIME;
-            made.lastTier = made.age;
-            made.extraHouses = level.getRandom().nextInt(3);
-            for (int pass = 0; pass < 4; pass++) {
-                queue(level, made);
-                Camps.instantBuild(level, made.id);
-            }
-        }
-        if (made != null && c.kind.equals("village")) {
-            if (level.getBlockState(site).canBeReplaced()) level.setBlockAndUpdate(site, Blocks.BELL.defaultBlockState());
-            for (int i = 0; i < 3 + made.tier; i++) {
-                Villager v = EntityType.VILLAGER.create(level);
-                if (v == null) continue;
-                v.moveTo(site.getX() + 2.5 - i * 2, site.getY(), site.getZ() + 2.5, level.getRandom().nextFloat() * 360f, 0f);
-                if (i == 2) v.setBaby(true);
-                level.addFreshEntity(v);
-            }
-        }
+        create(level, site, c.kind, true, c.tier, false, true);
     }
 
     private static void update(ServerLevel level, Colony c, long t) {
@@ -718,13 +800,6 @@ public final class Colonies {
             default -> {
             }
         }
-        long gap = c.lastSeen == 0 ? 0 : t - c.lastSeen;
-        long clock = level.getDayTime();
-        if (c.lastClock != 0) gap = Math.max(gap, clock - c.lastClock);
-        c.lastClock = clock;
-        c.lastSeen = t;
-        if (gap > 2400) catchUp(level, c, gap, t);
-        c.age += 100L * speed();
         if ((t / 100) % 240 == 0 && !c.grudges.isEmpty()) {
             c.grudges.replaceAll((k, v) -> v - 2);
             c.grudges.values().removeIf(v -> v <= 0);
@@ -734,7 +809,9 @@ public final class Colonies {
         else villageLife(level, c, t);
         if (!c.active()) return;
         boolean watched = level.getNearestPlayer(c.x, c.y, c.z, 96, false) != null;
-        if (watched && c.population == 0 && !(c.kind.equals("village") && c.attacker != null && c.age - c.lastRaidedAge < 72000)) {
+        boolean canRefill = hostile(c.kind) && c.reserve > 0 && level.getDifficulty() != Difficulty.PEACEFUL;
+        if (watched && c.population == 0 && !canRefill && level.getDifficulty() != Difficulty.PEACEFUL
+            && !(c.kind.equals("village") && c.attacker != null && c.age - c.lastRaidedAge < 72000)) {
             if (c.emptySince == 0) c.emptySince = c.age;
             if (c.age - c.emptySince >= (hostile(c.kind) ? 96000 : 48000)) {
                 abandon(level, c);
@@ -744,40 +821,56 @@ public final class Colonies {
             c.emptySince = 0;
         }
         if (c.gloom > 0) gloom(level, c);
-        boolean grows = canSettle(level, c.kind, c.center());
+        grow(level, c, t, true);
+    }
+
+    private static void grow(ServerLevel level, Colony c, long t, boolean nearby) {
+        boolean grows = canSettle(level, c.kind, c.center()) && (c.population > 0 || c.camp);
         if (grows && Camps.pending(c.id) == 0 && (t / 100) % 6 == 0) queue(level, c);
-        if (warp >= 20 && Camps.pending(c.id) > 0) Camps.instantBuild(level, c.id);
-        if (grows && Camps.pending(c.id) == 0 && c.tier >= maxTier(level, c) && c.extraHouses < extraCap(c)) {
+        if (nearby && warp >= 20 && Camps.pending(c.id) > 0) Camps.instantBuild(level, c.id);
+        if (grows && c.population >= 2 && Camps.pending(c.id) == 0 && c.tier >= maxTier(level, c) && c.extraHouses < extraCap(c)) {
             long base = Math.max(c.lastExtra, c.lastTier);
             if (c.age - base >= HOUSE_TIME) {
                 c.extraHouses++;
-                c.lastExtra = c.age;
+                c.lastExtra = base + HOUSE_TIME;
                 queue(level, c);
             }
         }
         if (grows) expand(level, c, 1);
         if (grows && Camps.pending(c.id) == 0 && c.age - c.lastTier >= TIER_TIME && c.tier < maxTier(level, c)) {
             c.tier++;
-            c.lastTier = c.age;
+            c.lastTier += TIER_TIME;
             queue(level, c);
             BlockPos center = c.center();
-            tell(level, center, 128, Component.translatable("mobslearn.colony.tier." + c.kind, c.tier + 1));
-            level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, center.getX() + 0.5, center.getY() + 3, center.getZ() + 0.5, 40, 2, 2, 2, 0.2);
+            if (nearby) {
+                tell(level, center, 128, newKind(c.kind) ? Component.translatable("mobslearn.colony.tier.faction", kindName(c), c.tier + 1)
+                    : Component.translatable("mobslearn.colony.tier." + c.kind, c.tier + 1));
+                level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, center.getX() + 0.5, center.getY() + 3, center.getZ() + 0.5, 40, 2, 2, 2, 0.2);
+            } else {
+                tell(level, center, 128, Component.translatable("mobslearn.colony.grew_away", Component.translatable(
+                    "mobslearn.settlements.kind." + c.kind), c.tier + 1));
+            }
         }
+    }
+
+    private static String coreOf(Colony c) {
+        if (c.camp) return "vcamp";
+        return hostile(c.kind) ? hallOf(c.kind) : "villager";
+    }
+
+    private static void queueCore(ServerLevel level, Colony c) {
+        int stage = c.camp ? 1 : hostile(c.kind) ? (c.tier < 1 ? 1 : c.tier < 3 ? 2 : 3) : Math.min(3, c.tier + 1);
+        Camps.addProject(level, coreOf(c), stage, c.center(), c.id, crewName(c.kind), 0, c.camp ? 0 : style(c));
     }
 
     private static void queue(ServerLevel level, Colony c) {
         scanWood(level, c);
+        queueCore(level, c);
+        if (c.camp) return;
         BlockPos center = c.center();
         String crew = crewName(c.kind);
         RandomSource r = level.getRandom();
-        if (c.camp) {
-            Camps.addProject(level, "vcamp", 1, center, c.id, crew);
-            return;
-        }
         if (hostile(c.kind)) {
-            int hall = c.tier < 1 ? 1 : c.tier < 3 ? 2 : 3;
-            Camps.addProject(level, hallOf(c.kind), hall, center, c.id, crew, 0, style(c));
             int houses = (c.tier == 0 ? 1 : c.tier * 2) + c.extraHouses;
             for (int attempt = 0; attempt < 12 && Camps.count(c.id, houseOf(c.kind)) < houses; attempt++) {
                 int idx = Camps.count(c.id, houseOf(c.kind)) + attempt;
@@ -810,13 +903,12 @@ public final class Colonies {
                 BlockPos site = Camps.siteNear(level, center.offset(0, 0, 16), 2, 5, r);
                 if (site != null) Camps.addProject(level, "skeleton", 2, site, c.id, crew);
             }
-            if (c.tier >= 3) {
+            if (c.tier >= 3 && !newKind(c.kind)) {
                 int rad = palisadeRadius(level, center);
                 if (rad > 0) Camps.addProject(level, c.kind.equals("skeleton") ? "spalisade" : c.kind.equals("creeper") ? "chedge" : "palisade", rad, center, c.id, crew);
             }
             landmarks(level, c, crew, r);
         } else {
-            Camps.addProject(level, "villager", Math.min(3, c.tier + 1), center, c.id, crew, 0, style(c));
             int adults = level.getEntitiesOfClass(Villager.class, new AABB(center).inflate(48, 24, 48), v -> !v.isBaby()).size();
             int want = Math.max(1, Math.min(homeCap(c), adults + 1));
             for (int attempt = 0; attempt < 6 && Camps.count(c.id, "vhouse") < want && (c.wood >= HOUSE_WOOD || Camps.count(c.id, "vhouse") < 2); attempt++) {
@@ -853,7 +945,6 @@ public final class Colonies {
         }
     }
 
-    /** Flags around the centre (one more per tier) and a watchtower from tier 2: visible signs that the settlement grows. */
     private static void landmarks(ServerLevel level, Colony c, String crew, RandomSource r) {
         if (c.camp) return;
         BlockPos center = c.center();
@@ -864,7 +955,8 @@ public final class Colonies {
             for (int d = 7; d <= 11 && site == null; d++) {
                 int x = center.getX() + (int) Math.round(Math.cos(a) * d), z = center.getZ() + (int) Math.round(Math.sin(a) * d);
                 if (!level.isLoaded(new BlockPos(x, center.getY(), z))) continue;
-                int y = Camps.groundY(level, x, z);
+                int y = Camps.groundY(level, x, z, center.getY(), 4);
+                if (y == Integer.MIN_VALUE) continue;
                 if (Math.abs(y - center.getY()) > 6) continue;
                 BlockPos at = new BlockPos(x, y, z);
                 if (!level.getBlockState(at.below()).getFluidState().isEmpty()) continue;
@@ -1132,31 +1224,42 @@ public final class Colonies {
     private static void zombieLife(ServerLevel level, Colony c, long t) {
         BlockPos center = c.center();
         List<Mob> residents = residents(level, c, 72);
-        c.population = residents.size();
+        int away = 0;
+        for (UUID id : c.raiders) if (level.getEntity(id) instanceof Mob raider && raider.isAlive() && !residents.contains(raider)) away++;
+        if (residents.isEmpty() && away == 0) away = taggedElsewhere(level, c);
+        c.population = residents.size() + away;
+        Saga.settlementTick(level, c.id, residents);
         RandomSource r = level.getRandom();
+        int target = Math.min(8, 3 + c.tier);
+        if (c.reserve < 0) c.reserve = target;
+        boolean standing = !c.hallDone || Camps.integrity(level, c.id, hallOf(c.kind)) < 0 || Camps.integrity(level, c.id, hallOf(c.kind)) >= 0.6;
+        if (standing && c.reserve < target && c.age - c.lastReserve >= 12000) {
+            c.reserve++;
+            c.lastReserve = c.age;
+        }
 
-        c.peace += 100L * speed();
         if (!c.neutral && c.peace >= PEACE_TIME && c.tier >= 1) {
             c.neutral = true;
-            tell(level, center, 96, Component.translatable("mobslearn.colony.neutral." + c.kind));
+            tell(level, center, 96, newKind(c.kind) ? Component.translatable("mobslearn.colony.neutral.faction", kindName(c))
+                : Component.translatable("mobslearn.colony.neutral." + c.kind));
             awardNear(level, center, 96, "peacemaker");
         }
         Mob chief = null;
         for (Mob m : residents) {
             if (m.getTags().contains(CHIEF)) chief = m;
             c.chiefAlive = chief != null;
-            if (c.neutral && m.getTarget() instanceof Player) m.setTarget(null);
+            if (c.neutral && m.getTarget() instanceof Player tp && !angryAt(c, tp)) m.setTarget(null);
         }
         if (chief != null && c.hallDone) homeChief(level, c, chief, center);
 
-        int target = Math.min(8, 3 + c.tier);
-        if (residents.size() < target && t >= c.nextSpawn && level.getDifficulty() != Difficulty.PEACEFUL) {
+        if (residents.size() + away < target && c.reserve > 0 && t >= c.nextSpawn && level.getDifficulty() != Difficulty.PEACEFUL) {
             Mob z = spawnResident(level, c, center.offset(r.nextInt(5) - 2, 0, -4));
+            if (z != null) c.reserve--;
             if (z != null && !residents.isEmpty()) {
                 Mob elder = residents.get(r.nextInt(residents.size()));
                 Behaviors.later(3, () -> inherit(level, z, elder));
             }
-            c.nextSpawn = t + Math.max(20, Math.max(600, 2400 - 400L * c.tier) / speed());
+            c.nextSpawn = t + Math.max(20, (long) (Math.max(600, 2400 - 400L * c.tier) / developmentSpeed()));
         }
         for (Mob m : residents) {
             if (m.getTarget() == null && !c.raiders.contains(m.getUUID()) && m.distanceToSqr(center.getX(), center.getY(), center.getZ()) > 36 * 36
@@ -1179,7 +1282,7 @@ public final class Colonies {
             if (chief == null) {
                 if (c.chiefDeadAge == 0) c.chiefDeadAge = c.age;
                 double integrity = Camps.integrity(level, c.id, hallOf(c.kind));
-                if (integrity >= 0 && integrity < 0.4) {
+                if (integrity >= 0 && integrity < 0.5) {
                     collapse(level, c, residents);
                     return;
                 }
@@ -1199,6 +1302,7 @@ public final class Colonies {
             }
         }
 
+        if (newKind(c.kind) && !c.kind.equals("pillager")) return;
         Colony enemy = near(level, center, "village", 220, true);
         if (enemy != null && (enemy.camp || c.kind.equals("creeper"))) enemy = null;
         if (enemy != null && c.tier >= 2 && !c.outposted && Math.sqrt(center.distSqr(enemy.center())) > 90
@@ -1218,18 +1322,24 @@ public final class Colonies {
         }
 
         long day = day(level);
-        if (day % 4 == 2 && level.isNight() && c.lastRaidNightDay != day && c.tier >= 1 && !c.neutral && residents.size() >= 2) {
+        Player provoker = c.neutral ? angryPlayerNear(level, c, 160) : null;
+        if (day % 4 == 2 && level.isNight() && c.lastRaidNightDay != day && c.tier >= 1 && (!c.neutral || provoker != null) && residents.size() >= 2) {
             c.lastRaidNightDay = day;
-            for (int i = 0; i < 2 && level.getDifficulty() != Difficulty.PEACEFUL; i++) {
+            for (int i = 0; i < 2 && c.reserve > 0 && level.getDifficulty() != Difficulty.PEACEFUL; i++) {
                 Mob z = spawnResident(level, c, center.offset(r.nextInt(7) - 3, 0, -5));
-                if (z != null) residents.add(z);
+                if (z != null) {
+                    residents.add(z);
+                    c.reserve--;
+                }
             }
             List<Mob> party = new ArrayList<>();
             for (Mob m : residents) if (m != chief && !Builders.busy(m)) party.add(m);
-            Player player = level.getNearestPlayer(c.x, c.y, c.z, 160, false);
+            Player player = c.neutral ? provoker : level.getNearestPlayer(c.x, c.y, c.z, 160, false);
+            if (c.neutral) enemy = null;
             if (enemy != null) startRaid(level, c, party, null, enemy, t);
             else if (player != null && !player.isCreative() && !player.isSpectator()) startRaid(level, c, party, player, null, t);
-            tell(level, center, 160, Component.translatable("mobslearn.colony.raidnight." + c.kind));
+            tell(level, center, 160, c.kind.equals("pillager") ? Component.translatable("mobslearn.colony.raidnight.faction", kindName(c))
+                : Component.translatable("mobslearn.colony.raidnight." + c.kind));
             awardNear(level, center, 160, "raid_night");
             level.playSound(null, center, SoundEvents.RAID_HORN.value(), SoundSource.HOSTILE, 4f, 0.8f);
             return;
@@ -1237,7 +1347,6 @@ public final class Colonies {
         raid(level, c, residents, enemy, t);
     }
 
-    /** The raided village rings its bell: villagers hide, golems go for the raiders, nearby players get a warning. */
     private static void alarm(ServerLevel level, Colony raiders, Mob scout) {
         BlockPos center = raiders.raidPos;
         BlockPos bell = null;
@@ -1263,6 +1372,7 @@ public final class Colonies {
             if (golem.getTarget() == null) golem.setTarget(scout);
         }
         Component msg = Component.translatable("mobslearn.colony.bell", kindName(raiders));
+        Allies.villageAttacked(level, center, kindName(raiders));
         WorldBrain.chronicle(msg, "bell");
         for (ServerPlayer p : level.players()) {
             if (p.distanceToSqr(center.getX(), center.getY(), center.getZ()) < 160 * 160) Net.notice(p, msg);
@@ -1343,7 +1453,8 @@ public final class Colonies {
             }
             if (!party.isEmpty()) {
                 startRaid(level, c, party, null, enemy, t);
-                tell(level, enemy.center(), 96, Component.translatable("mobslearn.colony.village_raid." + c.kind));
+                tell(level, enemy.center(), 96, c.kind.equals("pillager") ? Component.translatable("mobslearn.colony.village_raid.faction", kindName(c))
+                    : Component.translatable("mobslearn.colony.village_raid." + c.kind));
                 level.playSound(null, enemy.center(), SoundEvents.RAID_HORN.value(), SoundSource.HOSTILE, 2f, 1.2f);
             }
             return;
@@ -1435,7 +1546,7 @@ public final class Colonies {
             var e = it.next();
             Forester f = e.getValue();
             Colony c = byId(f.colony);
-            if (c == null || t - f.started > 6000) {
+            if (c == null || !allowsKind(c.kind) || t - f.started > 6000) {
                 it.remove();
                 continue;
             }
@@ -1649,7 +1760,7 @@ public final class Colonies {
             attacker.hasPartner = true;
             attacker.px = bell.getX();
             attacker.pz = bell.getZ();
-            tell(level, bell, 160, Component.translatable("mobslearn.colony.village_fell." + takenKind));
+            tell(level, bell, 160, villageFell(takenKind));
             awardNear(level, bell, 160, "fallen_village");
             dirty = true;
             return;
@@ -1667,10 +1778,15 @@ public final class Colonies {
             attacker.decay = 80;
             Camps.forgetColony(attacker.id);
         }
-        tell(level, bell, 160, Component.translatable("mobslearn.colony.village_fell." + takenKind));
+        tell(level, bell, 160, villageFell(takenKind));
         awardNear(level, bell, 160, "fallen_village");
         level.playSound(null, bell, SoundEvents.ZOMBIE_VILLAGER_CONVERTED, SoundSource.HOSTILE, 3f, 0.7f);
         dirty = true;
+    }
+
+    private static Component villageFell(String kind) {
+        if (!newKind(kind)) return Component.translatable("mobslearn.colony.village_fell." + kind);
+        return Component.translatable("mobslearn.colony.village_fell.faction", Component.translatable("mobslearn.settlements.kind." + kind));
     }
 
     private static void collapse(ServerLevel level, Colony c, List<Mob> residents) {
@@ -1679,7 +1795,8 @@ public final class Colonies {
         c.decay = 80;
         c.raiders.clear();
         Camps.forgetColony(c.id);
-        tell(level, c.center(), 128, Component.translatable("mobslearn.colony.collapsed." + c.kind));
+        tell(level, c.center(), 128, newKind(c.kind) ? Component.translatable("mobslearn.colony.collapsed.faction", kindName(c))
+            : Component.translatable("mobslearn.colony.collapsed." + c.kind));
         awardNear(level, c.center(), 64, "liberator");
         dirty = true;
     }
@@ -1744,26 +1861,71 @@ public final class Colonies {
     }
 
     private static Mob spawnResident(ServerLevel level, Colony c, BlockPos at) {
+        return spawnResident(level, c, at, -1);
+    }
+
+    private static Mob spawnResident(ServerLevel level, Colony c, BlockPos at, int initial) {
+        if (newKind(c.kind) && level.getDifficulty() == Difficulty.PEACEFUL) return null;
+        RandomSource r = level.getRandom();
         Mob z = switch (c.kind) {
             case "skeleton" -> EntityType.SKELETON.create(level);
             case "creeper" -> EntityType.CREEPER.create(level);
-            default -> (level.getRandom().nextFloat() < 0.15f ? EntityType.ZOMBIE_VILLAGER : EntityType.ZOMBIE).create(level);
+            case "pillager" -> (initial == 1 || initial < 0 && r.nextInt(4) == 0 ? EntityType.VINDICATOR : EntityType.PILLAGER).create(level);
+            case "witch" -> EntityType.WITCH.create(level);
+            case "nether" -> switch (initial < 0 ? r.nextInt(3) : initial % 3) {
+                case 1 -> EntityType.BLAZE.create(level);
+                case 2 -> EntityType.WITHER_SKELETON.create(level);
+                default -> EntityType.PIGLIN.create(level);
+            };
+            case "enderman" -> EntityType.ENDERMAN.create(level);
+            default -> (r.nextFloat() < 0.15f ? EntityType.ZOMBIE_VILLAGER : EntityType.ZOMBIE).create(level);
         };
         if (z == null) return null;
         if (c.kind.equals("skeleton")) z.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.BOW));
-        int y = level.isLoaded(at) ? level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, at.getX(), at.getZ()) : at.getY();
-        z.moveTo(at.getX() + 0.5, y, at.getZ() + 0.5, level.getRandom().nextFloat() * 360f, 0f);
+        if (z.getType() == EntityType.PILLAGER) z.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.CROSSBOW));
+        if (z.getType() == EntityType.VINDICATOR) z.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_AXE));
+        if (z.getType() == EntityType.WITHER_SKELETON) z.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE_SWORD));
+        if (z.getType() == EntityType.PIGLIN) {
+            z.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.GOLDEN_SWORD));
+        }
+        if (newKind(c.kind) && !z.getMainHandItem().isEmpty()) z.setDropChance(EquipmentSlot.MAINHAND, 0f);
+        int y = at.getY();
+        if (c.kind.equals("nether")) {
+            y = Integer.MIN_VALUE;
+            for (BlockPos candidate : BlockPos.betweenClosed(at.offset(-2, 0, -2), at.offset(2, 0, 2))) {
+                if (!level.isLoaded(candidate)) continue;
+                y = Camps.groundY(level, candidate.getX(), candidate.getZ(), at.getY(), 4);
+                if (y == Integer.MIN_VALUE) continue;
+                at = candidate.immutable();
+                break;
+            }
+            if (y == Integer.MIN_VALUE) return null;
+        } else if (level.isLoaded(at)) {
+            y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, at.getX(), at.getZ());
+        }
+        z.moveTo(at.getX() + 0.5, y, at.getZ() + 0.5, r.nextFloat() * 360f, 0f);
         z.addTag(HOME + c.id);
         z.setPersistenceRequired();
-        if (!c.kind.equals("creeper") && z.getItemBySlot(EquipmentSlot.HEAD).isEmpty()) {
+        if ((c.kind.equals("zombie") || c.kind.equals("skeleton")) && z.getItemBySlot(EquipmentSlot.HEAD).isEmpty()) {
             z.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.LEATHER_HELMET));
             z.setDropChance(EquipmentSlot.HEAD, 0f);
         }
         level.addFreshEntity(z);
         level.sendParticles(ParticleTypes.LARGE_SMOKE, z.getX(), z.getY() + 0.8, z.getZ(), 12, 0.3, 0.5, 0.3, 0.02);
-        level.playSound(null, z.blockPosition(), c.kind.equals("skeleton") ? SoundEvents.SKELETON_AMBIENT
-            : c.kind.equals("creeper") ? SoundEvents.CREEPER_PRIMED : SoundEvents.ZOMBIE_AMBIENT, SoundSource.HOSTILE, 0.6f, 0.8f);
+        level.playSound(null, z.blockPosition(), ambient(c.kind), SoundSource.HOSTILE, 0.6f, 0.8f);
         return z;
+    }
+
+    private static net.minecraft.sounds.SoundEvent ambient(String kind) {
+        return switch (kind) {
+            case "skeleton" -> SoundEvents.SKELETON_AMBIENT;
+            case "creeper" -> SoundEvents.CREEPER_PRIMED;
+            case "pillager" -> SoundEvents.PILLAGER_AMBIENT;
+            case "witch" -> SoundEvents.WITCH_AMBIENT;
+            case "nether" -> SoundEvents.PIGLIN_AMBIENT;
+            case "enderman" -> SoundEvents.ENDERMAN_AMBIENT;
+            default -> SoundEvents.ZOMBIE_AMBIENT;
+        };
     }
 
     private static void homeChief(ServerLevel level, Colony c, Mob chief, BlockPos center) {
@@ -1772,7 +1934,8 @@ public final class Colonies {
         if (chief.getTarget() != null && d > 18) chief.setTarget(null);
         if (chief.getTarget() != null) return;
         if (d > 40 && level.getNearestPlayer(chief, 24) == null) {
-            int y = Camps.groundY(level, center.getX(), center.getZ() + 1);
+            int y = Camps.groundY(level, center.getX(), center.getZ() + 1, center.getY(), 4);
+            if (y == Integer.MIN_VALUE) return;
             chief.moveTo(hx, y, hz, chief.getYRot(), 0f);
             chief.getNavigation().stop();
         } else if (d > 6) {
@@ -1785,13 +1948,9 @@ public final class Colonies {
         Mob chief = spawnResident(level, c, origin.offset(0, 0, 1));
         if (chief == null) return;
         chief.addTag(CHIEF);
-        chief.setCustomName(Component.translatable(switch (c.kind) {
-            case "skeleton" -> "mobslearn.camp.captain";
-            case "creeper" -> "mobslearn.camp.elder";
-            default -> "mobslearn.camp.chief";
-        }));
+        chief.setCustomName(chiefName(c));
         chief.setCustomNameVisible(true);
-        if (c.kind.equals("creeper")) {
+        if (c.kind.equals("creeper") || newKind(c.kind)) {
             chief.setGlowingTag(false);
             return;
         }
@@ -1860,7 +2019,7 @@ public final class Colonies {
         Colony c = byId(colonyId);
         if (c == null) return;
         switch (kind) {
-            case "zombie", "skeleton", "cgrove" -> {
+            case "zombie", "skeleton", "cgrove", "pillager", "witch", "nether", "enderman" -> {
                 if (!hostile(c.kind) || !kind.equals(hallOf(c.kind))) break;
                 c.hallDone = true;
                 boolean hasChief = false;
@@ -1872,7 +2031,7 @@ public final class Colonies {
                 awardNear(level, origin, 16, "village_grows");
                 tell(level, origin, 64, Component.translatable("mobslearn.colony.house.done"));
             }
-            case "zhouse", "shouse", "cnest" -> {
+            case "zhouse", "shouse", "cnest", "pillager_home", "witch_home", "nether_home", "enderman_home" -> {
                 if (level.getDifficulty() != Difficulty.PEACEFUL) spawnResident(level, c, origin.offset(0, 0, -3));
             }
             case "vcamp" -> tell(level, origin, 64, Component.translatable("mobslearn.colony.camp.done"));
@@ -1925,12 +2084,46 @@ public final class Colonies {
     public static void residentHurt(ServerLevel level, Mob victim, Player p) {
         Colony c = homeOf(victim);
         if (c == null) return;
-        c.peace = 0;
-        if (c.neutral) {
-            c.neutral = false;
-            tell(level, c.center(), 96, Component.translatable("mobslearn.colony.angry." + c.kind));
-        }
+        if (!c.neutral) c.peace = 0;
+        if (p instanceof ServerPlayer sp) provoke(c, sp);
         dirty = true;
+    }
+
+    private static final long PROVOKE_TIME = 36000;
+
+    private static boolean angryAt(Colony c, Player p) {
+        if (p == null) return false;
+        String id = p.getUUID().toString();
+        Long at = c.provoked.get(id);
+        if (at != null && c.age - at < PROVOKE_TIME) return true;
+        return c.grudges.getOrDefault(id, 0) >= BAN;
+    }
+
+    private static Player angryPlayerNear(ServerLevel level, Colony c, double radius) {
+        for (ServerPlayer p : level.players()) {
+            if (p.isSpectator() || p.isCreative() || p.distanceToSqr(c.x, c.y, c.z) > radius * radius) continue;
+            if (angryAt(c, p)) return p;
+        }
+        return null;
+    }
+
+    private static void provoke(Colony c, ServerPlayer p) {
+        String id = p.getUUID().toString();
+        Long at = c.provoked.get(id);
+        boolean fresh = at == null || c.age - at >= PROVOKE_TIME;
+        c.provoked.put(id, c.age);
+        c.provoked.values().removeIf(v -> c.age - v >= PROVOKE_TIME);
+        if (fresh && c.neutral) Net.notice(p, newKind(c.kind) ? Component.translatable("mobslearn.colony.angry.faction", kindName(c))
+            : Component.translatable("mobslearn.colony.angry." + c.kind));
+        dirty = true;
+    }
+
+    private static int taggedElsewhere(ServerLevel level, Colony c) {
+        int n = 0;
+        for (Entity e : level.getAllEntities()) {
+            if (e instanceof Mob m && m.isAlive() && m.getTags().contains(HOME + c.id)) n++;
+        }
+        return n;
     }
 
     public static final int WARN = 10, BAN = 20;
@@ -1941,6 +2134,7 @@ public final class Colonies {
     }
 
     public static List<String> villageIds(ServerLevel level) {
+        if (!WorldBrain.get().villages) return List.of();
         List<String> out = new ArrayList<>();
         String dim = dimId(level);
         for (Colony c : colonies) if (!hostile(c.kind) && c.dim.equals(dim)) out.add(c.id);
@@ -1969,7 +2163,7 @@ public final class Colonies {
         Colony best = null;
         double bd = (double) radius * radius;
         for (Colony c : colonies) {
-            if (c.pending || !c.active() || !c.dim.equals(dim)) continue;
+            if (!allowsKind(c.kind) || c.pending || !c.active() || !c.dim.equals(dim)) continue;
             double d = at.distSqr(c.center());
             if (d < bd) {
                 bd = d;
@@ -1990,10 +2184,7 @@ public final class Colonies {
         if (before < WARN && g >= WARN && g < BAN) Net.notice(p, Component.translatable("mobslearn.colony.grudge", kind));
         if (before < BAN && g >= BAN) {
             Net.notice(p, Component.translatable("mobslearn.colony.banned", kind));
-            if (hostile(c.kind)) {
-                c.neutral = false;
-                c.peace = 0;
-            }
+            if (hostile(c.kind)) provoke(c, p);
         }
         if (before > 0 && g == 0) Net.notice(p, Component.translatable("mobslearn.colony.forgiven", kind));
     }
@@ -2007,6 +2198,7 @@ public final class Colonies {
 
     public static void blockBroken(Level lvl, Player player, BlockPos pos, BlockState state) {
         if (!(lvl instanceof ServerLevel level) || !(player instanceof ServerPlayer sp)) return;
+        Saga.blockBroken(level, player, pos, state);
         if (state.is(BlockTags.DIRT) || state.is(BlockTags.BASE_STONE_OVERWORLD) || state.is(BlockTags.LEAVES) || state.is(BlockTags.SAND)
             || state.canBeReplaced() || state.is(BlockTags.FLOWERS) || state.is(Blocks.GRAVEL) || state.is(BlockTags.SAPLINGS)) return;
         if (state.is(BlockTags.LOGS)) {
@@ -2082,24 +2274,23 @@ public final class Colonies {
     public static void calm(Mob m) {
         if (!(m.getTarget() instanceof Player)) return;
         Colony c = homeOf(m);
-        if (c != null && c.neutral && !c.raiders.contains(m.getUUID())) {
+        if (c != null && c.neutral && !c.raiders.contains(m.getUUID()) && !angryAt(c, (Player) m.getTarget())) {
             m.setTarget(null);
             if (m.isUsingItem()) m.stopUsingItem();
             m.setAggressive(false);
         }
     }
 
-    /** True when a resident of a peaceful settlement should ignore this player (not banned, not a raider, not provoked). */
     public static boolean refusesTarget(Mob m, net.minecraft.world.entity.LivingEntity target) {
+        if (Saga.refusesTarget(m, target)) return true;
+        Colony c = homeOf(m);
+        if (c != null && newKind(c.kind) && homeOf(target) == c && WorldBrain.get().enabled) return true;
         if (!(target instanceof Player p) || p.isCreative() || p.isSpectator()) return false;
         if (colonies.isEmpty() || !WorldBrain.get().enabled) return false;
-        Colony c = homeOf(m);
         if (c == null || !c.neutral || c.raiders.contains(m.getUUID())) return false;
         if (m.getLastHurtByMob() == p) return false;
-        return c.grudges.getOrDefault(p.getUUID().toString(), 0) < BAN;
+        return !angryAt(c, p);
     }
-
-    // --- Diplomacy: truce gifts and chief quests -------------------------------------------------------------------------
 
     private static final class Quest {
         String colony, type, what;
@@ -2108,13 +2299,16 @@ public final class Colonies {
 
     private static final java.util.Map<UUID, Quest> quests = new java.util.HashMap<>();
 
-    /** How many of the held item a settlement accepts as a peace offering (0 = not a fitting gift). */
     private static int giftNeed(String kind, ItemStack held) {
         if (held.isEmpty()) return 0;
         String id = BuiltInRegistries.ITEM.getKey(held.getItem()).getPath();
         return switch (kind) {
             case "creeper" -> id.startsWith("music_disc") ? 1 : id.equals("gunpowder") ? 16 : 0;
             case "skeleton" -> id.equals("bone") ? 16 : id.equals("arrow") ? 32 : 0;
+            case "pillager" -> id.equals("emerald") ? 8 : id.equals("arrow") ? 32 : 0;
+            case "witch" -> id.equals("redstone") ? 16 : id.equals("spider_eye") ? 12 : 0;
+            case "nether" -> id.equals("gold_ingot") ? 8 : id.equals("quartz") ? 16 : 0;
+            case "enderman" -> id.equals("chorus_fruit") ? 16 : id.equals("ender_pearl") ? 8 : 0;
             case "zombie" -> id.equals("cooked_beef") || id.equals("cooked_porkchop") || id.equals("cooked_mutton") || id.equals("cooked_chicken") ? 8 : 0;
             default -> 0;
         };
@@ -2146,7 +2340,8 @@ public final class Colonies {
         }
         level.sendParticles(ParticleTypes.HEART, who.getX(), who.getY() + who.getBbHeight() + 0.3, who.getZ(), 8, 0.5, 0.3, 0.5, 0.0);
         level.playSound(null, who.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.NEUTRAL, 1f, 0.8f);
-        tell(level, c.center(), 160, Component.translatable("mobslearn.colony.truce." + c.kind, p.getName()));
+        tell(level, c.center(), 160, newKind(c.kind) ? Component.translatable("mobslearn.colony.truce.faction", kindName(c), p.getName())
+            : Component.translatable("mobslearn.colony.truce." + c.kind, p.getName()));
         Net.notice(p, Component.translatable("mobslearn.colony.truce.done", kindName(c)));
         return InteractionResult.SUCCESS;
     }
@@ -2155,6 +2350,10 @@ public final class Colonies {
         return switch (kind) {
             case "skeleton" -> new String[][]{{"hunt", "zombie", "5"}, {"hunt", "spider", "4"}, {"fetch", "arrow", "32"}, {"fetch", "string", "12"}, {"fetch", "flint", "10"}};
             case "creeper" -> new String[][]{{"hunt", "spider", "4"}, {"hunt", "skeleton", "4"}, {"fetch", "gunpowder", "10"}, {"fetch", "sand", "24"}, {"fetch", "moss_block", "8"}};
+            case "pillager" -> new String[][]{{"fetch", "arrow", "32"}, {"fetch", "iron_ingot", "4"}};
+            case "witch" -> new String[][]{{"fetch", "redstone", "12"}, {"fetch", "spider_eye", "6"}};
+            case "nether" -> new String[][]{{"fetch", "quartz", "24"}, {"fetch", "gold_ingot", "4"}};
+            case "enderman" -> new String[][]{{"fetch", "chorus_fruit", "12"}, {"fetch", "end_stone", "24"}};
             default -> new String[][]{{"hunt", "skeleton", "5"}, {"hunt", "creeper", "3"}, {"fetch", "cooked_beef", "6"}, {"fetch", "bread", "8"}, {"fetch", "iron_ingot", "3"}};
         };
     }
@@ -2202,7 +2401,8 @@ public final class Colonies {
         quests.put(p.getUUID(), nq);
         dirty = true;
         level.playSound(null, chief.blockPosition(), SoundEvents.BOOK_PAGE_TURN, SoundSource.NEUTRAL, 1f, 1f);
-        Net.notice(p, Component.translatable("mobslearn.quest.given." + c.kind, questText(nq)));
+        Net.notice(p, newKind(c.kind) ? Component.translatable("mobslearn.quest.given.faction", questText(nq))
+            : Component.translatable("mobslearn.quest.given." + c.kind, questText(nq)));
         p.sendSystemMessage(Component.translatable("mobslearn.quest.chat", kindName(c), questText(nq)));
         return InteractionResult.SUCCESS;
     }
@@ -2221,6 +2421,8 @@ public final class Colonies {
 
     public static InteractionResult interact(Player player, Level level, InteractionHand hand, Entity entity) {
         if (level.isClientSide() || hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
+        InteractionResult saga = Saga.interact(player, level, hand, entity);
+        if (saga != InteractionResult.PASS) return saga;
         if (player instanceof ServerPlayer dsp && level instanceof ServerLevel dl && !(entity instanceof Villager) && WorldBrain.get().enabled) {
             Colony home = homeOf(entity);
             if (home != null && hostile(home.kind) && home.active()) {
@@ -2263,8 +2465,7 @@ public final class Colonies {
         }
         if (ServerPlayNetworking.canSend(sp, Net.TradeOpenPayload.TYPE)) {
             ServerPlayNetworking.send(sp, new Net.TradeOpenPayload(entity.getId(), tradeKind(c), offers(c).toString()));
-            level.playSound(null, entity.blockPosition(), c.kind.equals("skeleton") ? SoundEvents.SKELETON_AMBIENT
-                : c.kind.equals("creeper") ? SoundEvents.CREEPER_PRIMED : SoundEvents.ZOMBIE_AMBIENT, SoundSource.NEUTRAL, 0.8f, 1.4f);
+            level.playSound(null, entity.blockPosition(), ambient(c.kind), SoundSource.NEUTRAL, 0.8f, 1.4f);
         }
         return InteractionResult.SUCCESS;
     }
@@ -2273,13 +2474,26 @@ public final class Colonies {
     }
 
     private static String tradeKind(Colony c) {
-        return c.kind.equals("skeleton") || c.kind.equals("creeper") ? c.kind : "zombie";
+        return c.kind;
     }
 
     private static Offer[] offersOf(Colony c) {
+        Offer[] base = baseOffers(c);
+        String egg = Allies.mercenaryEgg(c.kind);
+        if (egg == null) return base;
+        Offer[] all = java.util.Arrays.copyOf(base, base.length + 1);
+        all[base.length] = new Offer("emerald", 6 + 2 * Math.min(3, c.tier), Allies.mercenaryFee(c.kind), 8, "hire:" + egg, Math.min(3, 1 + c.tier / 2), 1);
+        return all;
+    }
+
+    private static Offer[] baseOffers(Colony c) {
         return switch (tradeKind(c)) {
             case "skeleton" -> SKELETON_OFFERS;
             case "creeper" -> CREEPER_OFFERS;
+            case "pillager" -> new Offer[]{new Offer("arrow", 32, "", 0, "emerald", 1, 0), new Offer("emerald", 5, "", 0, "crossbow", 1, 1)};
+            case "witch" -> new Offer[]{new Offer("spider_eye", 12, "", 0, "emerald", 1, 0), new Offer("emerald", 4, "", 0, "glowstone_dust", 8, 1)};
+            case "nether" -> new Offer[]{new Offer("gold_ingot", 4, "", 0, "quartz", 12, 0), new Offer("gold_ingot", 8, "", 0, "blaze_rod", 2, 1)};
+            case "enderman" -> new Offer[]{new Offer("chorus_fruit", 16, "", 0, "emerald", 1, 0), new Offer("emerald", 5, "", 0, "ender_pearl", 4, 1)};
             default -> OFFERS;
         };
     }
@@ -2322,8 +2536,10 @@ public final class Colonies {
             j.addProperty("ac", o.ac);
             j.addProperty("b", o.b);
             j.addProperty("bc", o.bc);
-            j.addProperty("r", o.r);
+            boolean hire = o.r.startsWith("hire:");
+            j.addProperty("r", hire ? o.r.substring(5) : o.r);
             j.addProperty("rc", o.rc);
+            if (hire) j.addProperty("hire", Allies.MERC_DAYS);
             j.addProperty("locked", o.tier > c.tier);
             j.addProperty("tier", o.tier + 1);
             arr.add(j);
@@ -2365,10 +2581,15 @@ public final class Colonies {
             Net.notice(player, Component.translatable("mobslearn.trade.poor"));
             return;
         }
+        if (o.r.startsWith("hire:") && !Allies.canHire(level, player, chief)) return;
         take(player, a, o.ac);
         if (b != null) take(player, b, o.bc);
-        ItemStack reward = new ItemStack(item(o.r), o.rc);
-        if (!player.getInventory().add(reward)) level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level, player.getX(), player.getY() + 0.5, player.getZ(), reward));
+        if (o.r.startsWith("hire:")) {
+            Allies.hire(level, player, chief, c.kind, o.rc);
+        } else {
+            ItemStack reward = new ItemStack(item(o.r), o.rc);
+            if (!player.getInventory().add(reward)) level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level, player.getX(), player.getY() + 0.5, player.getZ(), reward));
+        }
         level.playSound(null, chief.blockPosition(), SoundEvents.ZOMBIE_VILLAGER_CURE, SoundSource.NEUTRAL, 0.5f, 1.6f);
         level.sendParticles(ParticleTypes.HAPPY_VILLAGER, chief.getX(), chief.getY() + 2, chief.getZ(), 8, 0.4, 0.3, 0.4, 0);
         Milestones.award(player, "chief_trade");
@@ -2383,7 +2604,7 @@ public final class Colonies {
     }
 
     private static void seed(ServerLevel level, long t) {
-        if (level.players().isEmpty() || !Builders.griefing(level)) return;
+        if (!WorldBrain.get().villages || level.players().isEmpty() || !Builders.griefing(level)) return;
         RandomSource r = level.getRandom();
         int intel = WorldBrain.get().intelligence();
         float chance = Math.min(0.6f, 0.2f + intel * 0.004f) * Math.min(5, warp);
@@ -2500,7 +2721,7 @@ public final class Colonies {
         String dim = dimId(player.level());
         List<Colony> list = new ArrayList<>();
         String me = player.getUUID().toString();
-        for (Colony c : colonies) if (!c.pending && c.dim.equals(dim) && !c.hidden.contains(me)) list.add(c);
+        for (Colony c : colonies) if (allowsKind(c.kind) && !c.pending && c.dim.equals(dim) && !c.hidden.contains(me)) list.add(c);
         list.sort(Comparator.comparingDouble(c -> player.distanceToSqr(c.x, c.y, c.z)));
         JsonArray arr = new JsonArray();
         for (int i = 0; i < Math.min(40, list.size()); i++) {
@@ -2557,6 +2778,7 @@ public final class Colonies {
         root.add("relations", rels);
         root.addProperty("warp", warp);
         ServerPlayNetworking.send(player, new Net.ColoniesPayload(root.toString()));
+        Saga.sendNemeses(player);
     }
 
     private static void markMaps(ServerLevel level) {
@@ -2568,7 +2790,9 @@ public final class Colonies {
                 if (!stack.is(Items.FILLED_MAP)) continue;
                 MapDecorations existing = stack.getOrDefault(DataComponents.MAP_DECORATIONS, MapDecorations.EMPTY);
                 for (Colony c : colonies) {
-                    if (c.pending || !c.dim.equals(dim) || !c.known.contains(p.getUUID().toString()) || p.distanceToSqr(c.x, c.y, c.z) > 2048.0 * 2048.0) continue;
+                    if (!allowsKind(c.kind) || c.pending || !c.dim.equals(dim) || c.known.isEmpty()
+                        || p.distanceToSqr(c.x, c.y, c.z) > 2048.0 * 2048.0) continue;
+                    if (!c.known.contains(p.getUUID().toString()) && !onMap(level, stack, c)) continue;
                     Holder<MapDecorationType> type = c.kind.equals("village") ? MapDecorationTypes.PLAINS_VILLAGE
                         : c.active() ? MapDecorationTypes.RED_X : MapDecorationTypes.TARGET_POINT;
                     String key = "mobslearn_" + c.id;
@@ -2580,7 +2804,15 @@ public final class Colonies {
         }
     }
 
+    private static boolean onMap(ServerLevel level, ItemStack stack, Colony c) {
+        MapItemSavedData data = net.minecraft.world.item.MapItem.getSavedData(stack, level);
+        if (data == null) return false;
+        int half = 64 << data.scale;
+        return Math.abs(c.x - data.centerX) < half && Math.abs(c.z - data.centerZ) < half;
+    }
+
     public static void villagerTick(ServerLevel level, Villager v, long t, RandomSource r) {
+        if (!WorldBrain.get().villages) return;
         long phase = (t / 5 + v.getId()) % 80;
         if (v.isBaby()) {
             if (TraitTags.get(v, "wasbaby") == 0) TraitTags.set(v, "wasbaby", 1);
@@ -2669,50 +2901,6 @@ public final class Colonies {
         dirty = true;
     }
 
-    private static void catchUp(ServerLevel level, Colony c, long gap, long t) {
-        if (!c.active()) return;
-        long gain = gap * speed();
-        c.age += gain;
-        if (!hostile(c.kind)) c.wood = (int) Math.min(200, c.wood + gain / 600);
-        if (hostile(c.kind)) c.peace += gain;
-        Camps.instantBuild(level, c.id);
-        int grown = 0;
-        while (c.tier < maxTier(level, c) && c.age - c.lastTier >= TIER_TIME && grown < 8) {
-            c.tier++;
-            c.lastTier += TIER_TIME;
-            queue(level, c);
-            Camps.instantBuild(level, c.id);
-            grown++;
-        }
-        long extraBase = Math.max(c.lastExtra, c.lastTier);
-        if (c.tier >= maxTier(level, c)) {
-            while (c.extraHouses < extraCap(c) && c.age - extraBase >= HOUSE_TIME) {
-                c.extraHouses++;
-                extraBase += HOUSE_TIME;
-                grown++;
-            }
-            c.lastExtra = extraBase;
-        }
-        if (grown > 0) {
-            for (int pass = 0; pass < 4; pass++) {
-                queue(level, c);
-                Camps.instantBuild(level, c.id);
-            }
-        }
-        expand(level, c, 3);
-        BlockPos center = c.center();
-        if (hostile(c.kind) && level.getDifficulty() != Difficulty.PEACEFUL) {
-            int have = residents(level, c, 72).size(), target = Math.min(8, 3 + c.tier);
-            for (int i = have; i < target; i++) spawnResident(level, c, center.offset(level.getRandom().nextInt(9) - 4, 0, -5));
-        } else if (!hostile(c.kind) && !c.camp) {
-            int have = level.getEntitiesOfClass(Villager.class, new AABB(center).inflate(48, 24, 48)).size();
-            for (int i = have; i < Math.min(have + grown * 2, 4 + 3 * c.tier); i++) baby(level, center);
-        }
-        if (grown > 0) tell(level, center, 128, Component.translatable("mobslearn.colony.grew_away", Component.translatable(
-            "mobslearn.settlements.kind." + c.kind), c.tier + 1));
-        dirty = true;
-    }
-
     private static void baby(ServerLevel level, BlockPos at) {
         Villager b = EntityType.VILLAGER.create(level);
         if (b == null) return;
@@ -2723,15 +2911,20 @@ public final class Colonies {
         level.sendParticles(ParticleTypes.HEART, b.getX(), b.getY() + 0.8, b.getZ(), 5, 0.4, 0.3, 0.4, 0);
     }
 
-    private static void promote(ServerLevel level, Colony c, Mob heir) {
-        heir.addTag(CHIEF);
-        heir.setCustomName(Component.translatable(switch (c.kind) {
+    private static Component chiefName(Colony c) {
+        return Component.translatable(switch (c.kind) {
             case "skeleton" -> "mobslearn.camp.captain";
             case "creeper" -> "mobslearn.camp.elder";
+            case "pillager", "witch", "nether", "enderman" -> "mobslearn.colony.leader." + c.kind;
             default -> "mobslearn.camp.chief";
-        }));
+        });
+    }
+
+    private static void promote(ServerLevel level, Colony c, Mob heir) {
+        heir.addTag(CHIEF);
+        heir.setCustomName(chiefName(c));
         heir.setCustomNameVisible(true);
-        if (!c.kind.equals("creeper")) {
+        if (!c.kind.equals("creeper") && !newKind(c.kind)) {
             heir.setItemSlot(EquipmentSlot.HEAD, new ItemStack(c.tier >= 3 ? Items.IRON_HELMET : Items.GOLDEN_HELMET));
             heir.setDropChance(EquipmentSlot.HEAD, 0f);
         }
@@ -2747,9 +2940,9 @@ public final class Colonies {
         if (player.isCreative()) return InteractionResult.PASS;
         Colony c = hostileNear(level, hit.getBlockPos(), 30);
         if (c == null || c.pending || !c.active()) return InteractionResult.PASS;
-        c.peace = 0;
         boolean was = c.neutral;
-        c.neutral = false;
+        if (!c.neutral) c.peace = 0;
+        if (player instanceof ServerPlayer thief) provoke(c, thief);
         int angry = 0;
         for (Mob m : residents(level, c, 48)) {
             m.setTarget(player);
@@ -2768,7 +2961,8 @@ public final class Colonies {
     }
 
     private static void remember(ServerLevel level, long t) {
-        if (!level.dimension().equals(Level.OVERWORLD)) return;
+        var dimension = level.dimension();
+        if (!dimension.equals(Level.OVERWORLD) && !dimension.equals(Level.NETHER) && !dimension.equals(Level.END)) return;
         var map = visited.computeIfAbsent(dimId(level), k -> new java.util.HashMap<>());
         for (ServerPlayer p : level.players()) {
             if (!p.isSpectator()) map.put(cell(p.getBlockX(), p.getBlockZ()), t);
@@ -2785,8 +2979,9 @@ public final class Colonies {
     }
 
     private static void seedVisited(ServerLevel level, long t) {
-        if (!level.dimension().equals(Level.OVERWORLD)) return;
-        var map = visited.get(dimId(level));
+        String dim = dimId(level);
+        boolean nether = level.dimension().equals(Level.NETHER), end = level.dimension().equals(Level.END);
+        var map = visited.get(dim);
         if (map == null || map.isEmpty() || colonies.size() >= 90 || !Builders.griefing(level)) return;
         RandomSource r = level.getRandom();
         if (r.nextFloat() > Math.min(0.9f, 0.25f * Math.min(4, warp))) return;
@@ -2794,23 +2989,25 @@ public final class Colonies {
         long pick = cells.get(r.nextInt(cells.size()));
         int cx = (int) (pick >> 32), cz = (int) pick;
         int x = (cx << 8) + 32 + r.nextInt(192), z = (cz << 8) + 32 + r.nextInt(192);
-        BlockPos at = new BlockPos(x, 64, z);
+        if (end && Math.abs(x) < 192 && Math.abs(z) < 192) return;
         for (ServerPlayer p : level.players()) if (p.distanceToSqr(x, p.getY(), z) < 200 * 200) return;
-        if (near(level, at, null, 180, false) != null) return;
+        for (Colony c : colonies) {
+            if (allowsKind(c.kind) && dim.equals(c.dim) && Math.abs(c.x - x) < 180 && Math.abs(c.z - z) < 180) return;
+        }
         int intel = WorldBrain.get().intelligence();
-        List<String> kinds = new ArrayList<>(List.of("zombie", "zombie", "village", "village"));
+        List<String> kinds = new ArrayList<>(List.of("zombie", "zombie", "pillager", "witch"));
+        if (WorldBrain.get().villages) kinds.addAll(List.of("village", "village"));
         if (intel >= 10) kinds.add("skeleton");
         if (intel >= 20) kinds.add("creeper");
         Colony seed = new Colony();
         seed.id = Long.toString(System.nanoTime() & 0xFFFFFFFFFFL, 36) + "v";
-        seed.kind = kinds.get(r.nextInt(kinds.size()));
-        seed.dim = dimId(level);
+        seed.kind = nether ? "nether" : end ? "enderman" : kinds.get(r.nextInt(kinds.size()));
+        seed.dim = dim;
         seed.x = x;
         seed.z = z;
-        seed.y = 64;
+        seed.y = nether ? 48 : 64;
         seed.natural = true;
         seed.pending = true;
-        seed.lastSeen = t;
         colonies.add(seed);
         dirty = true;
     }
@@ -2847,7 +3044,10 @@ public final class Colonies {
                 }
             }
         }
-        if (c.tier >= 1 && villagers.size() < 4 + 3 * c.tier && t >= c.nextBirth && !level.isNight()) {
+        int grown = 0;
+        for (Villager v : villagers) if (!v.isBaby()) grown++;
+        if (c.tier >= 1 && grown >= 2 && villagers.size() < Math.min(4 + 3 * c.tier, Camps.count(c.id, "vhouse") * 2 + 2)
+            && t >= c.nextBirth && !level.isNight()) {
             c.nextBirth = t + Math.max(200, 9600 / speed());
             if (r.nextFloat() < 0.5f) baby(level, bell);
         }
@@ -2957,7 +3157,7 @@ public final class Colonies {
         String dim = dimId(level);
         RandomSource r = level.getRandom();
         List<Colony> list = new ArrayList<>();
-        for (Colony c : colonies) if (c.dim.equals(dim) && !c.pending && c.active() && !c.camp) list.add(c);
+        for (Colony c : colonies) if (allowsKind(c.kind) && c.dim.equals(dim) && !c.pending && c.active() && !c.camp) list.add(c);
         for (int i = 0; i < list.size(); i++) {
             for (int j = i + 1; j < list.size(); j++) {
                 Colony a = list.get(i), b = list.get(j);
@@ -3118,6 +3318,7 @@ public final class Colonies {
         if (!(killer instanceof ServerPlayer p)) return;
         List<Mob> left = residents(level, c, 48);
         left.remove(dead);
+        if (dead.getTags().contains(CHIEF)) Saga.chiefKilled(level, dead, p, c.id, left);
         boolean chief = dead.getTags().contains(CHIEF);
         for (Mob m : left) if (m.getTags().contains(CHIEF)) chief = false;
         if (!chief && c.chiefAlive) return;
@@ -3129,6 +3330,128 @@ public final class Colonies {
         Camps.forgetColony(c.id);
         Net.notice(p, Component.translatable("mobslearn.colony.cleared", kindName(c)));
         awardNear(level, c.center(), 64, "liberator");
+        dirty = true;
+    }
+
+    public record View(String id, String kind, String dim, BlockPos center, int tier, boolean neutral, boolean camp, int population, boolean hallDone) {
+        public boolean hostile() {
+            return !"village".equals(kind);
+        }
+    }
+
+    private static View view(Colony c) {
+        return new View(c.id, c.kind, c.dim, c.center(), c.tier, c.neutral, c.camp, c.population, c.hallDone);
+    }
+
+    public static List<View> views(Level level) {
+        List<View> out = new ArrayList<>();
+        String dim = dimId(level);
+        for (Colony c : colonies) if (allowsKind(c.kind) && c.active() && c.dim.equals(dim)) out.add(view(c));
+        return out;
+    }
+
+    public static View viewById(String id) {
+        Colony c = byId(id);
+        return c == null || !c.active() ? null : view(c);
+    }
+
+    public static View viewOf(Entity e) {
+        Colony c = homeOf(e);
+        return c == null || !c.active() ? null : view(c);
+    }
+
+    public static String homeTag(String id) {
+        return HOME + id;
+    }
+
+    public static boolean isChief(Entity e) {
+        return e.getTags().contains(CHIEF);
+    }
+
+    public static List<Mob> residentsOf(ServerLevel level, String id, double radius) {
+        Colony c = byId(id);
+        return c == null ? List.of() : residents(level, c, radius);
+    }
+
+    public static boolean isAngryAt(String id, Player p) {
+        Colony c = byId(id);
+        return c != null && (!c.neutral || angryAt(c, p));
+    }
+
+    public static void provokeBy(String id, ServerPlayer p) {
+        Colony c = byId(id);
+        if (c != null) provoke(c, p);
+    }
+
+    public static void forgive(String id, ServerPlayer p, int grudge) {
+        Colony c = byId(id);
+        if (c == null || !(p.level() instanceof ServerLevel level)) return;
+        c.provoked.remove(p.getUUID().toString());
+        int g = c.grudges.getOrDefault(p.getUUID().toString(), 0);
+        if (g > 0) setGrudge(level, c, p, g - grudge);
+        dirty = true;
+    }
+
+    public static Component kindNameOf(String id) {
+        Colony c = byId(id);
+        return c == null ? Component.translatable("mobslearn.settlements.kind.zombie") : kindName(c);
+    }
+
+    public static boolean sameSettlement(String a, String b) {
+        Colony ca = byId(a), cb = byId(b);
+        return ca != null && ca == cb;
+    }
+
+    public static boolean declareWar(ServerLevel level, String a, String b) {
+        Colony ca = byId(a), cb = byId(b);
+        if (ca == null || cb == null || ca == cb || relation(ca, cb).equals("war")) return false;
+        relations.put(pair(ca, cb), "war");
+        dirty = true;
+        Component msg = Component.translatable("mobslearn.colony.war", kindName(ca), kindName(cb));
+        tell(level, ca.center(), 220, msg);
+        tell(level, cb.center(), 220, msg);
+        return true;
+    }
+
+    public static void discoverFor(String id, ServerPlayer p) {
+        Colony c = byId(id);
+        if (c == null) return;
+        String uid = p.getUUID().toString();
+        c.hidden.remove(uid);
+        if (!c.known.contains(uid)) c.known.add(uid);
+        dirty = true;
+    }
+
+    public static Container hallChest(ServerLevel level, String id, boolean create) {
+        Colony c = byId(id);
+        if (c == null) return null;
+        BlockPos origin = Camps.originOf(c.id, hallOf(c.kind));
+        if (origin != null) {
+            for (BlockPos at : new BlockPos[]{origin.offset(1, 0, 1), origin.offset(2, 0, 2)}) {
+                if (level.getBlockEntity(at) instanceof Container chest) return chest;
+            }
+        }
+        if (!create) return null;
+        BlockPos center = c.center();
+        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, center.getX() + 2, center.getZ() + 2);
+        BlockPos at = new BlockPos(center.getX() + 2, y, center.getZ() + 2);
+        if (level.getBlockEntity(at) instanceof Container existing) return existing;
+        if (!level.getBlockState(at).canBeReplaced()) return null;
+        level.setBlockAndUpdate(at, Blocks.BARREL.defaultBlockState());
+        return level.getBlockEntity(at) instanceof Container barrel ? barrel : null;
+    }
+
+    public static Mob spawnResidentFor(ServerLevel level, String id, BlockPos at) {
+        Colony c = byId(id);
+        return c == null ? null : spawnResident(level, c, at);
+    }
+
+    public static void burnVillage(ServerLevel level, String id) {
+        Colony c = byId(id);
+        if (c != null && !hostile(c.kind) && c.active()) fall(level, c);
+    }
+
+    public static void markDirty() {
         dirty = true;
     }
 }

@@ -137,6 +137,9 @@ public final class Behaviors {
         Social.tick(level);
         Chatter.tick(level, level.getGameTime());
         Perf.stop("social", s0);
+        s0 = Perf.start();
+        Saga.levelTick(level);
+        Perf.stop("events", s0);
         long t = level.getGameTime();
         if (t % 5 != 0) return;
         s0 = Perf.start();
@@ -147,7 +150,6 @@ public final class Behaviors {
         }
     }
 
-    /** Mobs near a player, in a fight or doing settlement work are "hot" (every 5 ticks); idle distant ones take turns every 20 ticks. */
     private static boolean hot(Mob mob, MobGroup g, double playerDist) {
         if (mob.getTarget() != null || playerDist < 16) return true;
         if (g == MobGroup.VILLAGER || g == MobGroup.IRON_GOLEM) return true;
@@ -199,7 +201,7 @@ public final class Behaviors {
                 } catch (Exception e) {
                     StackTraceElement[] st = e.getStackTrace();
                     String where = e.getClass().getName() + (st.length > 0 ? st[0].toString() : "");
-                    if (reported.size() < 64 && reported.add(where)) com.rrm.mobslearn.MobsLearn.LOG.warn("[MobsLearn] mob behaviour failed for {}", mob.getType(), e);
+                    if (reported.size() < 64 && reported.add(where)) com.rrm.mobslearn.MobsLearn.LOG.warn("Behaviour failed: {}", mob.getType(), e);
                 }
             }
         }
@@ -213,6 +215,12 @@ public final class Behaviors {
         MobGroup g = MobGroup.of(mob.getType());
         if (g == null || !mob.isAlive()) return;
         RandomSource r = level.getRandom();
+        if (g == MobGroup.BOSS) {
+            BossMemory.tick(level, mob, t);
+            return;
+        }
+        if (Saga.mobTick(level, mob, g, t)) return;
+        Wildlife.tick(level, mob, g, t, r);
         Critters.tick(level, mob, g, t, r);
         if (g.hostile) Critters.climb(mob);
         LivingEntity target = mob.getTarget();
@@ -263,6 +271,14 @@ public final class Behaviors {
                 }
             }
             case CREEPER -> {
+                if ((lvl = TraitTags.get(mob, "creeper_jumper")) > 0 && mob instanceof Creeper jumper) {
+                    MobEffectInstance jump = mob.getEffect(MobEffects.JUMP_BOOST);
+                    if (jumper.getSwellDir() > 0) {
+                        if (jump != null && !jump.isVisible()) mob.removeEffect(MobEffects.JUMP_BOOST);
+                    } else if (jump == null || (!jump.isInfiniteDuration() && jump.getDuration() < 30)) {
+                        mob.addEffect(new MobEffectInstance(MobEffects.JUMP_BOOST, 60, Math.min(1, lvl - 1), false, false));
+                    }
+                }
                 if (targetPlayer != null && TraitTags.get(mob, "creeper_angel") > 0 && watched(targetPlayer, mob)) {
                     mob.getNavigation().stop();
                     mob.setDeltaMovement(0, mob.getDeltaMovement().y, 0);
@@ -490,6 +506,7 @@ public final class Behaviors {
     }
 
     public static void afterDamage(LivingEntity e, DamageSource src, float base, float taken, boolean blocked) {
+        if (!blocked) Saga.afterDamage(e, src, taken);
         if (!(e instanceof Player) && e instanceof Mob victim && src.getEntity() instanceof Player hitter && e.level() instanceof ServerLevel sl && taken > 0) {
             Critters.mobHurt(sl, victim, hitter);
         }
@@ -554,6 +571,7 @@ public final class Behaviors {
 
     public static void onDeath(LivingEntity e, DamageSource src) {
         if (!(e.level() instanceof ServerLevel level)) return;
+        Saga.onDeath(e, src);
         Critters.onDeath(level, e, src);
         if (src.getEntity() instanceof ServerPlayer hero && e instanceof Mob dead) Colonies.mobKilled(level, hero, dead);
         if (e instanceof Mob dm) Colonies.residentDied(level, dm, src);
@@ -596,6 +614,7 @@ public final class Behaviors {
     }
 
     public static void onUnload(Entity e, ServerLevel level) {
+        Saga.onUnload(e, level);
         if (e instanceof Mob mob) Combat.forget(mob);
         NewSkills.onUnload(e);
         if (!(e instanceof Creeper c) || e.getRemovalReason() != Entity.RemovalReason.DISCARDED) return;

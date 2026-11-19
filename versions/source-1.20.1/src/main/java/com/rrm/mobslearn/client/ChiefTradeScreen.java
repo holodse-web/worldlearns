@@ -18,7 +18,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 public class ChiefTradeScreen extends Screen {
-    private record Offer(int index, ItemStack a, ItemStack b, ItemStack result, boolean locked, int tier) {
+    private record Offer(int index, ItemStack a, ItemStack b, ItemStack result, boolean locked, int tier, int hire) {
     }
 
     private static final int ROW = 30;
@@ -40,7 +40,7 @@ public class ChiefTradeScreen extends Screen {
             JsonObject o = e.getAsJsonObject();
             offers.add(new Offer(o.get("i").getAsInt(), Anim.stack(o.get("a").getAsString(), o.get("ac").getAsInt()),
                 Anim.stack(o.get("b").getAsString(), o.get("bc").getAsInt()), Anim.stack(o.get("r").getAsString(), o.get("rc").getAsInt()),
-                o.get("locked").getAsBoolean(), o.get("tier").getAsInt()));
+                o.get("locked").getAsBoolean(), o.get("tier").getAsInt(), o.has("hire") ? o.get("hire").getAsInt() : 0));
         }
     }
 
@@ -48,7 +48,10 @@ public class ChiefTradeScreen extends Screen {
     protected void init() {
         if (openedAt == 0) openedAt = Util.getMillis();
         pw = Math.min(300, width - 20);
-        sub = font.split(Component.translatable("mobslearn.trade.sub." + kind), pw - 52);
+        sub = font.split(Component.translatable(switch (kind) {
+            case "pillager", "witch", "nether", "enderman" -> "mobslearn.trade.sub.faction";
+            default -> "mobslearn.trade.sub." + kind;
+        }), pw - 52);
         extra = Math.max(0, sub.size() - 1) * 10;
         ph = Math.min(60 + extra + offers.size() * (ROW + 4) + 30, height - 20);
         px = (width - pw) / 2;
@@ -117,11 +120,29 @@ public class ChiefTradeScreen extends Screen {
         int y0 = py + Math.round((1f - p) * 12f);
         g.fill(px, y0, px + pw, y0 + ph, Anim.fade(0xF4120F0D, p));
         Ui.border(g, px, y0, pw, ph, Anim.fade(0x40FFFFFF, p));
-        g.fill(px, y0, px + pw, y0 + 2, Anim.fade(kind.equals("skeleton") ? 0xFFD8D8D0 : kind.equals("creeper") ? 0xFF4FD15A : 0xFF6FA84A, p));
+        int accent = switch (kind) {
+            case "skeleton" -> 0xFFD8D8D0;
+            case "creeper" -> 0xFF4FD15A;
+            case "pillager" -> 0xFF8A9A9C;
+            case "witch" -> 0xFF9B4FD1;
+            case "nether" -> 0xFFC6754D;
+            case "enderman" -> 0xFFB46CFF;
+            default -> 0xFF6FA84A;
+        };
+        g.fill(px, y0, px + pw, y0 + 2, Anim.fade(accent, p));
         if (p > 0.5f) {
             g.pose().pushPose();
             g.pose().translate(px + 8, y0 + 6, 0);
-            com.rrm.mobslearn.client.Ui.blitUV(g,com.rrm.mobslearn.MobsLearn.id("textures/gui/icon/" + (kind.equals("skeleton") ? "skeleton_skull" : kind.equals("creeper") ? "creeper_head" : "zombie_head") + ".png"), 0, 0, 32, 32, 0f, 1f, 0f, 1f);
+            String icon = switch (kind) {
+                case "skeleton" -> "skeleton_skull";
+                case "creeper" -> "creeper_head";
+                case "pillager" -> "pillager_spawn_egg";
+                case "witch" -> "witch_spawn_egg";
+                case "nether" -> "magma_cream";
+                case "enderman" -> "enderman_spawn_egg";
+                default -> "zombie_head";
+            };
+            com.rrm.mobslearn.client.Ui.blitUV(g,com.rrm.mobslearn.MobsLearn.id("textures/gui/icon/" + icon + ".png"), 0, 0, 32, 32, 0f, 1f, 0f, 1f);
             g.pose().popPose();
         }
         Ui.scaledText(g, font, title, px + 46, y0 + 10, 1.3f, Anim.fade(0xFFFFFFFF, p), false, false);
@@ -151,7 +172,7 @@ public class ChiefTradeScreen extends Screen {
             }
             com.rrm.mobslearn.client.Ui.text(g, font, "→", ix + 58, iy + 4, ok ? Ui.GREEN : Ui.MUTED, false);
             stackAt(g, o.result, ix + 74, iy, true);
-            Component name = o.result.getHoverName();
+            Component name = o.hire > 0 ? Component.translatable("mobslearn.trade.hire", o.result.getCount(), o.hire) : o.result.getHoverName();
             String n = font.plainSubstrByWidth(name.getString(), pw - 130);
             com.rrm.mobslearn.client.Ui.text(g, font, n, ix + 98, iy + 1, o.locked ? 0xFF7A7466 : 0xFFFFFFFF, false);
             Component sub = o.locked ? Component.translatable("mobslearn.trade.locked", o.tier)

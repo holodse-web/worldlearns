@@ -17,7 +17,6 @@ public class Knowledge {
     public final Map<String, Map<String, Double>> regions = new LinkedHashMap<>();
     public record JournalEntry(long day, String skill, int level) {}
     public final List<JournalEntry> journal = new ArrayList<>();
-    /** World chronicle: notable events (settlements founded, wars, raids, truces...). args prefixed "t:" are translation keys. */
     public record ChronicleEntry(long day, String key, List<String> args, String icon) {
         public net.minecraft.network.chat.Component text() {
             Object[] parts = new Object[args.size()];
@@ -30,8 +29,21 @@ public class Knowledge {
     }
     public static final int MAX_CHRONICLE = 160;
     public final List<ChronicleEntry> chronicle = new ArrayList<>();
-    public double speed = 1.0;
-    public boolean enabled = true, absurd = true, combat = true;
+    public double speed = 1.0, settlementSpeed = 1.0;
+    public boolean enabled = true, absurd = true, combat = true, villages = true;
+    public boolean settlements = true, nemesis = true, homeRaids = true, bossMemory = true, greatMarch = true;
+    public static final int F_SETTLEMENTS = 1, F_NEMESIS = 2, F_RAIDS = 4, F_BOSSES = 8, F_MARCH = 16;
+
+    public int flags() {
+        return (settlements ? F_SETTLEMENTS : 0) | (nemesis ? F_NEMESIS : 0) | (homeRaids ? F_RAIDS : 0) | (bossMemory ? F_BOSSES : 0) | (greatMarch ? F_MARCH : 0);
+    }
+
+    public void setFlags(int f) {
+        settlements = (f & F_SETTLEMENTS) != 0; nemesis = (f & F_NEMESIS) != 0; homeRaids = (f & F_RAIDS) != 0;
+        bossMemory = (f & F_BOSSES) != 0; greatMarch = (f & F_MARCH) != 0;
+    }
+
+    private static final java.util.Set<String> SETTLEMENT_SKILLS = java.util.Set.of("zombie_camp", "skeleton_tower", "spider_nest", "villager_build");
     public int difficulty = 1;
     public int warp = 1;
     public int buildLimit = 32;
@@ -39,9 +51,17 @@ public class Knowledge {
     public void clear() {
         points.clear(); regions.clear(); journal.clear(); chronicle.clear();
         speed = 1.0; enabled = absurd = combat = true; difficulty = 1; buildLimit = 32;
+        settlementSpeed = 1.0; villages = true;
+        settlements = nemesis = homeRaids = bossMemory = greatMarch = true;
+    }
+
+    public void setSettlementSpeed(double value) {
+        if (Double.isFinite(value)) settlementSpeed = Math.max(0.25, Math.min(5.0, value));
     }
 
     public boolean allows(Skill s) {
+        if (s != null && !settlements && SETTLEMENT_SKILLS.contains(s.id())) return false;
+        if (s != null && s.group() == MobGroup.BOSS && !bossMemory) return false;
         return enabled && (s == null || ((!s.absurd() || absurd)
             && (combat || !(s.combat() || (s.group().hostile && !s.absurd())))));
     }
@@ -52,7 +72,9 @@ public class Knowledge {
         int sum = 0, max = 0;
         for (Skill s : Skill.ALL) {
             if (s.group() == MobGroup.WORLD) continue;
-            sum += s.level(points(s)); max += Skill.MAX_LEVEL;
+            int lvl = s.level(points(s));
+            if (lvl == 0 && s.fresh()) continue;
+            sum += lvl; max += Skill.MAX_LEVEL;
         }
         return max == 0 ? 0 : Math.round(sum * 100f / max);
     }
@@ -116,6 +138,9 @@ public class Knowledge {
         o.addProperty("absurd", absurd); o.addProperty("combat", combat);
         o.addProperty("difficulty", difficulty);
         o.addProperty("buildLimit", buildLimit);
+        o.addProperty("settlementSpeed", settlementSpeed);
+        o.addProperty("villages", villages);
+        o.addProperty("flags", flags());
         JsonArray log = new JsonArray();
         for (JournalEntry entry : journal) {
             JsonObject line = new JsonObject();
@@ -165,6 +190,9 @@ public class Knowledge {
         if (o.has("difficulty")) difficulty = Math.max(0, Math.min(2, o.get("difficulty").getAsInt()));
         if (o.has("buildLimit")) buildLimit = Math.max(1, Math.min(4096, o.get("buildLimit").getAsInt()));
         if (o.has("warp")) warp = Math.max(1, o.get("warp").getAsInt());
+        if (o.has("settlementSpeed")) setSettlementSpeed(o.get("settlementSpeed").getAsDouble());
+        if (o.has("villages")) villages = o.get("villages").getAsBoolean();
+        if (o.has("flags")) setFlags(o.get("flags").getAsInt());
         if (o.has("journal") && o.get("journal").isJsonArray()) {
             for (JsonElement e : o.getAsJsonArray("journal")) {
                 try {

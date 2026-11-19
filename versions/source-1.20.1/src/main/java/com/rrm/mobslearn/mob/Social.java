@@ -232,8 +232,9 @@ public final class Social {
     public static void chat(ServerPlayer sender, String text) {
         ServerLevel level = (ServerLevel) sender.level();
         long t = level.getGameTime();
-        if (Talk.converse(sender, text)) {
-            if (WorldBrain.get().enabled && cooldown("chat" + sender.getUUID(), t, 100)) WorldBrain.teach(Trigger.CHAT_NEAR, MobGroup.VILLAGER, 1, level, sender.blockPosition());
+        Mob speaker = Talk.converse(sender, text);
+        if (speaker != null) {
+            if (speaker instanceof Villager && WorldBrain.get().enabled && cooldown("chat" + sender.getUUID(), t, 100)) WorldBrain.teach(Trigger.CHAT_NEAR, MobGroup.VILLAGER, 1, level, sender.blockPosition());
             return;
         }
         List<Villager> near = level.getEntitiesOfClass(Villager.class, sender.getBoundingBox().inflate(12));

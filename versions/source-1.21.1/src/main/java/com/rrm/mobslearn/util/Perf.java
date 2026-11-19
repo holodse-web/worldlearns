@@ -3,7 +3,6 @@ package com.rrm.mobslearn.util;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Tiny always-on profiler: rolling per-section timings, shown by /mobslearn perf. */
 public final class Perf {
     private static final class Section {
         double avgNs, peakNs;
@@ -36,13 +35,11 @@ public final class Perf {
         s.callsInTick++;
     }
 
-    /** Adds to a per-tick counter (e.g. mobs processed). */
     public static void count(String name, double amount) {
         Long acc = pending.get("#" + name);
         pending.put("#" + name, (acc == null ? 0 : acc) + Math.round(amount * 1000));
     }
 
-    /** Called once at the end of every server tick: folds this tick into the rolling averages. */
     public static void endTick() {
         tick++;
         for (Map.Entry<String, Section> e : sections.entrySet()) {

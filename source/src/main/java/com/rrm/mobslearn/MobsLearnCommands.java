@@ -19,13 +19,31 @@ public final class MobsLearnCommands {
 
     private static int settle(CommandSourceStack src, String kind) {
         net.minecraft.core.BlockPos pos = net.minecraft.core.BlockPos.containing(src.getPosition());
+        if (!com.rrm.mobslearn.mob.Colonies.suitableDimension(src.getLevel(), kind)) {
+            src.sendFailure(Component.translatable("mobslearn.cmd.colony.dimension"));
+            return 0;
+        }
         if (!com.rrm.mobslearn.mob.Colonies.found(src.getLevel(), pos, kind, false)) {
             src.sendFailure(Component.translatable("mobslearn.cmd.colony.taken"));
             return 0;
         }
-        src.sendSuccess(() -> Component.translatable("mobslearn.cmd.colony.created." + kind), true);
+        src.sendSuccess(() -> switch (kind) {
+            case "pillager", "witch", "nether", "enderman" -> Component.translatable("mobslearn.cmd.colony.created.faction",
+                Component.translatable("mobslearn.settlements.kind." + kind));
+            default -> Component.translatable("mobslearn.cmd.colony.created." + kind);
+        }, true);
         if (!com.rrm.mobslearn.mob.Builders.griefing(src.getLevel())) src.sendSuccess(() -> Component.translatable("mobslearn.cmd.colony.griefing"), false);
         return 1;
+    }
+
+    private static int event(CommandSourceStack src, String which) {
+        net.minecraft.server.level.ServerPlayer p = src.getPlayer();
+        if (p == null && src.getLevel().getNearestPlayer(src.getPosition().x, src.getPosition().y, src.getPosition().z, -1, false)
+            instanceof net.minecraft.server.level.ServerPlayer near) p = near;
+        boolean ok = com.rrm.mobslearn.mob.Saga.force(which, src.getLevel(), p);
+        if (ok) src.sendSuccess(() -> Component.translatable("mobslearn.cmd.event." + which + ".ok"), true);
+        else src.sendFailure(Component.translatable("mobslearn.cmd.event." + which + ".fail"));
+        return ok ? 1 : 0;
     }
 
     private static int aiStatus(CommandSourceStack src) {
@@ -122,6 +140,10 @@ public final class MobsLearnCommands {
                 .then(Commands.literal("village").executes(ctx -> settle(ctx.getSource(), "village")))
                 .then(Commands.literal("skeleton").executes(ctx -> settle(ctx.getSource(), "skeleton")))
                 .then(Commands.literal("creeper").executes(ctx -> settle(ctx.getSource(), "creeper")))
+                .then(Commands.literal("pillager").executes(ctx -> settle(ctx.getSource(), "pillager")))
+                .then(Commands.literal("witch").executes(ctx -> settle(ctx.getSource(), "witch")))
+                .then(Commands.literal("nether").executes(ctx -> settle(ctx.getSource(), "nether")))
+                .then(Commands.literal("enderman").executes(ctx -> settle(ctx.getSource(), "enderman")))
                 .then(Commands.literal("remove").executes(ctx -> {
                     boolean ok = com.rrm.mobslearn.mob.Colonies.remove(ctx.getSource().getLevel(), net.minecraft.core.BlockPos.containing(ctx.getSource().getPosition()));
                     if (ok) ctx.getSource().sendSuccess(() -> Component.translatable("mobslearn.cmd.colony.removed"), true);
@@ -134,6 +156,10 @@ public final class MobsLearnCommands {
                     for (String line : list) ctx.getSource().sendSuccess(() -> Component.literal("  " + line), false);
                     return list.size();
                 })))
+            .then(Commands.literal("event")
+                .then(Commands.literal("march").executes(ctx -> event(ctx.getSource(), "march")))
+                .then(Commands.literal("raid").executes(ctx -> event(ctx.getSource(), "raid")))
+                .then(Commands.literal("nemesis").executes(ctx -> event(ctx.getSource(), "nemesis"))))
             .then(Commands.literal("perf")
                 .executes(ctx -> {
                     for (String line : com.rrm.mobslearn.util.Perf.report()) ctx.getSource().sendSuccess(() -> Component.literal(line), false);

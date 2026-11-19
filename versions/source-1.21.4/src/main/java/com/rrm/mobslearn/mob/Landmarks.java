@@ -8,7 +8,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
-/** Visible signs of a settlement's growth: banners on poles, watchtowers and a village wall. */
 public final class Landmarks {
     public static final String[] COLORS = {"white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray",
         "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"};
@@ -21,12 +20,15 @@ public final class Landmarks {
         return (b == null || b == Blocks.AIR ? fallback : b).defaultBlockState();
     }
 
-    /** Banner colour per settlement kind (index into COLORS). */
     public static int color(String kind, int i) {
         return switch (kind) {
             case "zombie" -> i % 2 == 0 ? 13 : 7;
             case "skeleton" -> i % 2 == 0 ? 0 : 8;
             case "creeper" -> i % 2 == 0 ? 5 : 15;
+            case "pillager" -> i % 2 == 0 ? 7 : 15;
+            case "witch" -> i % 2 == 0 ? 10 : 13;
+            case "nether" -> i % 2 == 0 ? 14 : 15;
+            case "enderman" -> i % 2 == 0 ? 2 : 15;
             default -> i % 2 == 0 ? 11 : 0;
         };
     }
@@ -36,11 +38,14 @@ public final class Landmarks {
             case "zombie" -> 1;
             case "creeper" -> 2;
             case "skeleton" -> 3;
+            case "pillager" -> 4;
+            case "witch" -> 5;
+            case "nether" -> 6;
+            case "enderman" -> 7;
             default -> 0;
         };
     }
 
-    /** A 4-high pole with a coloured banner on top. lvl = colour index. */
     public static void flag(Designs.B p, int lvl) {
         BlockState pole = Blocks.SPRUCE_FENCE.defaultBlockState();
         p.put(0, 0, 0, Blocks.COBBLESTONE_WALL.defaultBlockState());
@@ -48,7 +53,6 @@ public final class Landmarks {
         p.put(0, 4, 0, block(COLORS[Math.floorMod(lvl, COLORS.length)] + "_banner", Blocks.TORCH));
     }
 
-    /** A small lookout tower (5x5 platform at y=7) with a ladder. lvl = material set. */
     public static void watchtower(Designs.B p, int lvl) {
         BlockState post, floor, rail, light;
         switch (lvl) {
@@ -69,6 +73,30 @@ public final class Landmarks {
                 floor = Blocks.BONE_BLOCK.defaultBlockState();
                 rail = Blocks.STONE_BRICK_WALL.defaultBlockState();
                 light = Blocks.SKELETON_SKULL.defaultBlockState();
+            }
+            case 4 -> {
+                post = Blocks.DARK_OAK_LOG.defaultBlockState();
+                floor = Blocks.DARK_OAK_PLANKS.defaultBlockState();
+                rail = Blocks.DARK_OAK_FENCE.defaultBlockState();
+                light = Blocks.LANTERN.defaultBlockState();
+            }
+            case 5 -> {
+                post = Blocks.MOSSY_COBBLESTONE.defaultBlockState();
+                floor = Blocks.MANGROVE_PLANKS.defaultBlockState();
+                rail = Blocks.MANGROVE_FENCE.defaultBlockState();
+                light = Blocks.SOUL_LANTERN.defaultBlockState();
+            }
+            case 6 -> {
+                post = Blocks.POLISHED_BASALT.defaultBlockState();
+                floor = Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState();
+                rail = Blocks.NETHER_BRICK_FENCE.defaultBlockState();
+                light = Blocks.SOUL_LANTERN.defaultBlockState();
+            }
+            case 7 -> {
+                post = Blocks.PURPUR_PILLAR.defaultBlockState();
+                floor = Blocks.END_STONE_BRICKS.defaultBlockState();
+                rail = Blocks.PURPUR_SLAB.defaultBlockState();
+                light = Blocks.END_ROD.defaultBlockState();
             }
             default -> {
                 post = Blocks.OAK_LOG.defaultBlockState();

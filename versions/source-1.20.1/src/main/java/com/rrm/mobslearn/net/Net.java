@@ -178,8 +178,11 @@ public final class Net {
         }
     }
 
-    public record SettingsPayload(double speed, boolean absurd, boolean combat, int difficulty, boolean enabled, int warp) implements Payload {
-        public static final PType<SettingsPayload> TYPE = new PType<>(MobsLearn.id("settings"), buf -> new SettingsPayload(buf.readDouble(), buf.readBoolean(), buf.readBoolean(), buf.readVarInt(), buf.readBoolean(), buf.readVarInt()));
+    public record SettingsPayload(double speed, boolean absurd, boolean combat, int difficulty, boolean enabled, int warp,
+                                  double settlementSpeed, boolean villages, int flags) implements Payload {
+        public static final PType<SettingsPayload> TYPE = new PType<>(MobsLearn.id("settings_v3"),
+            buf -> new SettingsPayload(buf.readDouble(), buf.readBoolean(), buf.readBoolean(), buf.readVarInt(),
+                buf.readBoolean(), buf.readVarInt(), buf.readDouble(), buf.readBoolean(), buf.readVarInt()));
 
         @Override
         public void write(FriendlyByteBuf buf) {
@@ -189,6 +192,9 @@ public final class Net {
             buf.writeVarInt(difficulty);
             buf.writeBoolean(enabled);
             buf.writeVarInt(warp);
+            buf.writeDouble(settlementSpeed);
+            buf.writeBoolean(villages);
+            buf.writeVarInt(flags);
         }
 
         @Override

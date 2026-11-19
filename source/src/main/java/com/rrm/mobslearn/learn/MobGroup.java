@@ -34,6 +34,7 @@ public enum MobGroup {
     BEE("bee_spawn_egg", 0xFFF2C53A, false, EntityTypes.BEE),
     FISH("cod_spawn_egg", 0xFF8FB7C9, false, EntityTypes.COD, EntityTypes.SALMON),
     HORSE("horse_spawn_egg", 0xFFC08A52, false, EntityTypes.HORSE, EntityTypes.DONKEY, EntityTypes.MULE),
+    BOSS("nether_star", 0xFFE04CE0, false, EntityTypes.ENDER_DRAGON, EntityTypes.WITHER, EntityTypes.WARDEN, EntityTypes.ELDER_GUARDIAN),
     WORLD("knowledge_book", 0xFFFFD25A, false);
 
     public final String iconId;

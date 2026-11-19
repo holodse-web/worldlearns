@@ -1,6 +1,6 @@
-diff -ruN a/src/main/java/com/rrm/mobslearn/MobsLearn.java b/src/main/java/com/rrm/mobslearn/MobsLearn.java
---- a/src/main/java/com/rrm/mobslearn/MobsLearn.java	2026-10-28 19:44:34.038754894 +0000
-+++ b/src/main/java/com/rrm/mobslearn/MobsLearn.java	2026-10-28 19:44:34.156042811 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/MobsLearn.java b/src/main/java/com/rrm/mobslearn/MobsLearn.java
+--- a/src/main/java/com/rrm/mobslearn/MobsLearn.java	2026-11-19 03:12:49.609866609 +0000
++++ b/src/main/java/com/rrm/mobslearn/MobsLearn.java	2026-11-19 03:12:49.720914909 +0000
 @@ -48,7 +48,7 @@
              com.rrm.mobslearn.learn.Milestones.checkWorld(handler.player);
          });
@@ -8,11 +8,11 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/MobsLearn.java b/src/main/java/com/r
 -        net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents.CHUNK_LOAD.register((level, chunk, generated) -> com.rrm.mobslearn.mob.Colonies.chunkLoaded(level, chunk, generated));
 +        net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents.CHUNK_GENERATE.register((level, chunk) -> com.rrm.mobslearn.mob.Colonies.chunkLoaded(level, chunk, true));
          ServerTickEvents.END_SERVER_TICK.register(server -> {
+             long started = com.rrm.mobslearn.util.Perf.start();
              WorldBrain.serverTick();
-             if (WorldBrain.get().enabled) Behaviors.serverTick(server);
-diff -ruN a/src/main/java/com/rrm/mobslearn/MobsLearnRules.java b/src/main/java/com/rrm/mobslearn/MobsLearnRules.java
---- a/src/main/java/com/rrm/mobslearn/MobsLearnRules.java	2026-10-28 19:44:33.445473046 +0000
-+++ b/src/main/java/com/rrm/mobslearn/MobsLearnRules.java	2026-10-28 19:44:34.155221771 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/MobsLearnRules.java b/src/main/java/com/rrm/mobslearn/MobsLearnRules.java
+--- a/src/main/java/com/rrm/mobslearn/MobsLearnRules.java	2026-11-19 03:12:49.128682438 +0000
++++ b/src/main/java/com/rrm/mobslearn/MobsLearnRules.java	2026-11-19 03:12:49.720793951 +0000
 @@ -1,12 +1,25 @@
  package com.rrm.mobslearn;
  
@@ -29,7 +29,6 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/MobsLearnRules.java b/src/main/java/
 -        .category(GameRuleCategory.MOBS).buildAndRegister(MobsLearn.id("enabled"));
 -    private MobsLearnRules() {}
 -    public static void register() {}
--}
 +    public static final GameRules.Key<GameRules.BooleanValue> ENABLED =
 +        GameRuleRegistry.register("mobslearn:enabled", GameRules.Category.MOBS, GameRuleFactory.createBooleanRule(true));
 +
@@ -46,10 +45,10 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/MobsLearnRules.java b/src/main/java/
 +    public static void set(GameRules rules, boolean value, MinecraftServer server) {
 +        rules.getRule(ENABLED).set(value, server);
 +    }
-+}
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/AskScreen.java b/src/main/java/com/rrm/mobslearn/client/AskScreen.java
---- a/src/main/java/com/rrm/mobslearn/client/AskScreen.java	2026-10-28 19:44:34.110847127 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/AskScreen.java	2026-10-28 19:44:34.154746963 +0000
+ }
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/AskScreen.java b/src/main/java/com/rrm/mobslearn/client/AskScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/AskScreen.java	2026-11-19 03:12:49.678973089 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/AskScreen.java	2026-11-19 03:12:49.719838391 +0000
 @@ -124,12 +124,16 @@
  
      @Override
@@ -110,9 +109,9 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/AskScreen.java b/src/main/jav
              }
          }
          if (correct != null) {
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/BannerHud.java b/src/main/java/com/rrm/mobslearn/client/BannerHud.java
---- a/src/main/java/com/rrm/mobslearn/client/BannerHud.java	2026-10-28 19:44:33.921949655 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/BannerHud.java	2026-10-28 19:44:34.154940081 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/BannerHud.java b/src/main/java/com/rrm/mobslearn/client/BannerHud.java
+--- a/src/main/java/com/rrm/mobslearn/client/BannerHud.java	2026-11-19 03:12:49.563876607 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/BannerHud.java	2026-11-19 03:12:49.719323467 +0000
 @@ -80,7 +80,7 @@
              current = null;
              return;
@@ -141,10 +140,10 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/BannerHud.java b/src/main/jav
          int bx = tx + font.width(label) + 6, bw = x + w - 10 - bx;
          if (bw > 10) {
              g.fill(bx, y + 34, bx + bw, y + 37, (Math.round(alpha * 0x50) << 24));
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java b/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java
---- a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java	2026-10-28 19:44:33.915569294 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java	2026-10-28 19:44:34.154788689 +0000
-@@ -99,6 +99,9 @@
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java b/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java	2026-11-19 03:12:49.559743609 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java	2026-11-19 03:12:49.719341936 +0000
+@@ -102,6 +102,9 @@
  
      @Override
      public void renderBackground(GuiGraphics g, int mx, int my, float a) {
@@ -154,7 +153,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java b/src/m
          g.fill(0, 0, width, height, Anim.fade(0xB0000000, Anim.ease((Util.getMillis() - openedAt) / 250f)));
      }
  
-@@ -106,11 +109,12 @@
+@@ -109,11 +112,12 @@
          if (s.isEmpty()) return;
          g.renderItem(s, x, y);
          String c = String.valueOf(s.getCount());
@@ -168,7 +167,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java b/src/m
          long now = Util.getMillis();
          dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
          lastFrame = now;
-@@ -126,7 +130,7 @@
+@@ -147,7 +151,7 @@
              g.pose().popPose();
          }
          Ui.scaledText(g, font, title, px + 46, y0 + 10, 1.3f, Anim.fade(0xFFFFFFFF, p), false, false);
@@ -177,7 +176,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java b/src/m
  
          int top = y0 + 44 + extra;
          for (int i = 0; i < offers.size(); i++) {
-@@ -147,17 +151,17 @@
+@@ -168,17 +172,17 @@
              int ix = px + 18, iy = ry + 7;
              stackAt(g, o.a, ix, iy, count(o.a) >= o.a.getCount());
              if (!o.b.isEmpty()) {
@@ -188,7 +187,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java b/src/m
 -            g.drawString(font, "→", ix + 58, iy + 4, ok ? Ui.GREEN : Ui.MUTED, false);
 +            com.rrm.mobslearn.client.Ui.text(g, font, "→", ix + 58, iy + 4, ok ? Ui.GREEN : Ui.MUTED, false);
              stackAt(g, o.result, ix + 74, iy, true);
-             Component name = o.result.getHoverName();
+             Component name = o.hire > 0 ? Component.translatable("mobslearn.trade.hire", o.result.getCount(), o.hire) : o.result.getHoverName();
              String n = font.plainSubstrByWidth(name.getString(), pw - 130);
 -            g.drawString(font, n, ix + 98, iy + 1, o.locked ? 0xFF7A7466 : 0xFFFFFFFF, false);
 +            com.rrm.mobslearn.client.Ui.text(g, font, n, ix + 98, iy + 1, o.locked ? 0xFF7A7466 : 0xFFFFFFFF, false);
@@ -199,9 +198,9 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/ChiefTradeScreen.java b/src/m
              if (o.locked) g.fill(px + 11, ry + 1, px + pw - 11, ry + ROW - 1, 0x70000000);
          }
          super.render(g, mx, my, a);
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java b/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java
---- a/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java	2026-10-28 19:44:33.903296093 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java	2026-10-28 19:44:34.155061025 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java b/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java
+--- a/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java	2026-11-19 03:12:49.545396737 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java	2026-11-19 03:12:49.719359170 +0000
 @@ -121,12 +121,12 @@
          }
          int ty = cy + (c.icon != null && title.size() == 1 && badgeW == 0 ? 4 : 0);
@@ -226,10 +225,10 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/FancyTooltip.java b/src/main/
                  cy += 10;
              }
          }
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main/java/com/rrm/mobslearn/client/JournalScreen.java
---- a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java	2026-10-28 19:44:34.104913089 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/JournalScreen.java	2026-10-28 19:44:34.154819391 +0000
-@@ -82,6 +82,9 @@
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main/java/com/rrm/mobslearn/client/JournalScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java	2026-11-19 03:12:49.673255127 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/JournalScreen.java	2026-11-19 03:12:49.719391013 +0000
+@@ -90,6 +90,9 @@
  
      @Override
      public void renderBackground(GuiGraphics g, int mx, int my, float partial) {
@@ -239,7 +238,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main
          g.fillGradient(0, 0, width, height, 0xF00E150D, 0xFA080C08);
      }
  
-@@ -105,6 +108,7 @@
+@@ -113,6 +116,7 @@
  
      @Override
      public void render(GuiGraphics g, int mx, int my, float partial) {
@@ -247,7 +246,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main
          long now = Util.getMillis();
          dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
          lastFrame = now;
-@@ -155,11 +159,11 @@
+@@ -163,11 +167,11 @@
          }
          soon.sort((a, b) -> Double.compare(progress(k, b), progress(k, a)));
          if (soon.size() > 4) soon = soon.subList(0, 4);
@@ -261,7 +260,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main
                  y += 11;
              }
              y += 4;
-@@ -174,14 +178,14 @@
+@@ -182,23 +186,23 @@
                  icon(g, s.iconId(), cx + 7, cy + 5, 24);
                  int lvl = k.level(s);
                  String name = font.plainSubstrByWidth(s.displayName().getString(), sw - 80);
@@ -279,7 +278,40 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main
              }
              y += ((soon.size() + scols - 1) / scols) * (sh + gap) + 6;
          }
-@@ -211,7 +215,7 @@
+ 
+-        g.drawString(font, Component.translatable("mobslearn.chronicle.title"), ix, y, Ui.GOLD, false);
++        com.rrm.mobslearn.client.Ui.text(g, font, Component.translatable("mobslearn.chronicle.title"), ix, y, Ui.GOLD, false);
+         y += 13;
+         if (k.chronicle.isEmpty()) {
+             for (FormattedCharSequence line : font.split(Component.translatable("mobslearn.chronicle.empty"), iw)) {
+-                g.drawString(font, line, ix, y, FAINT, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, line, ix, y, FAINT, false);
+                 y += 11;
+             }
+             y += 6;
+@@ -212,10 +216,10 @@
+                 g.fill(ix, y, ix + 2, y + eh, Ui.GOLD);
+                 icon(g, ce.icon(), ix + 6, y + (eh - 14) / 2, 14);
+                 Component pill = Component.translatable("mobslearn.journal.day", ce.day());
+-                g.drawString(font, pill, ix + 24, y + 4, Ui.GOLD, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, pill, ix + 24, y + 4, Ui.GOLD, false);
+                 int ty = y + 4;
+                 for (FormattedCharSequence line : lines) {
+-                    g.drawString(font, line, ix + 70, ty, 0xFFE8E2CC, false);
++                    com.rrm.mobslearn.client.Ui.text(g, font, line, ix + 70, ty, 0xFFE8E2CC, false);
+                     ty += 10;
+                 }
+                 y += eh + 3;
+@@ -225,7 +229,7 @@
+                 int mw = font.width(more) + 12;
+                 boolean over = inside && mx >= ix && mx < ix + mw && my >= y && my < y + 14;
+                 g.fill(ix, y, ix + mw, y + 14, over ? 0x50FFD25A : 0x28FFD25A);
+-                g.drawString(font, more, ix + 6, y + 3, Ui.GOLD, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, more, ix + 6, y + 3, Ui.GOLD, false);
+                 chronicleHit = new int[]{ix, y, mw, 14};
+                 y += 18;
+             } else {
+@@ -259,7 +263,7 @@
                  g.fill(cx, y, cx + lw, y + 15, Ui.mix(0x18FFFFFF, (0x50 << 24) | (col & 0xFFFFFF), hv));
                  Ui.border(g, cx, y, lw, 15, sel ? col : Ui.mix(0x22FFFFFF, col, hv));
                  if (grp != null) icon(g, grp.iconId, cx + 4, y + 1, 13);
@@ -288,7 +320,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main
                  chipHits.add(new int[]{cx, y, lw, 15});
                  chipGroups.add(grp);
                  cx += lw + 4;
-@@ -225,7 +229,7 @@
+@@ -273,7 +277,7 @@
              icon(g, "writable_book", ix + 12, y + 14, 32);
              int ty = y + 16;
              for (FormattedCharSequence line : font.split(Component.translatable("mobslearn.journal.empty"), iw - 64)) {
@@ -297,7 +329,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main
                  ty += 11;
              }
              y += 70;
-@@ -245,8 +249,8 @@
+@@ -293,8 +297,8 @@
                  Component pill = Component.translatable("mobslearn.journal.day", e.day());
                  int pw = font.width(pill) + 12;
                  g.fill(ix, y, ix + pw, y + 14, 0x40FFD25A);
@@ -308,7 +340,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main
                  g.fill(ix + pw + 12 + font.width(when), y + 7, ix + iw, y + 8, 0x18FFFFFF);
                  y += 20;
              }
-@@ -267,26 +271,26 @@
+@@ -315,26 +319,26 @@
              icon(g, s.iconId(), ix + 16, y + 7, 24);
              int ty = y + 7;
              for (FormattedCharSequence line : headL) {
@@ -340,10 +372,10 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/JournalScreen.java b/src/main
              y += 14;
          }
          contentH = y + Math.round(scroll) - top + 10;
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java
---- a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java	2026-10-28 19:44:34.102324596 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java	2026-10-28 19:44:34.155091054 +0000
-@@ -211,7 +211,7 @@
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java	2026-11-19 03:12:49.670811434 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java	2026-11-19 03:12:49.719451752 +0000
+@@ -217,7 +217,7 @@
              else detail = null;
              return true;
          }
@@ -352,7 +384,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
              if (overlayOpen()) {
                  if (help) closeHelp();
                  else detail = null;
-@@ -287,11 +287,15 @@
+@@ -293,11 +293,15 @@
  
      @Override
      public void renderBackground(GuiGraphics g, int mx, int my, float a) {
@@ -368,7 +400,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
          long now = Util.getMillis();
          dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
          lastFrame = now;
-@@ -344,7 +348,7 @@
+@@ -350,7 +354,7 @@
          int logoH = 24, logoW = Math.round(logoH * (Ui.LOGO_W / (float) Ui.LOGO_H));
          Ui.logoAt(g, 10, 7, logoW, logoH);
          Component credit = Component.translatable("mobslearn.credit");
@@ -377,7 +409,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
  
          boolean synced = ClientKnowledge.synced();
          int intel = synced ? kn.intelligence() : 0;
-@@ -363,8 +367,8 @@
+@@ -369,8 +373,8 @@
          g.pose().pushPose();
          g.pose().translate(cx, 6, 0);
          g.pose().scale(labelScale, labelScale, 1);
@@ -388,7 +420,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
          g.pose().popPose();
  
          int barY = 19;
-@@ -411,7 +415,7 @@
+@@ -417,7 +421,7 @@
              underColor = GOLD;
          }
          String u = this.font.plainSubstrByWidth(under.getString(), Math.max(60, right - left));
@@ -397,7 +429,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
          boolean labelHot = !overlayOpen() && mouseY >= 3 && mouseY < 17 && mouseX >= cx - lw / 2 - 3 && mouseX < cx + lw / 2 + 3;
          float lh = hoverAnim("intelLabel", labelHot);
          if (lh > 0.02f) Ui.fill(g, cx - lw / 2f * lh, 16, lw * lh, 1, fade(ACCENT, lh));
-@@ -442,7 +446,7 @@
+@@ -448,7 +452,7 @@
              int ry = sideY + 4 + e.y - scroll;
              if (ry > sideY + sideH || ry + e.h < sideY) continue;
              if (e.header != null) {
@@ -406,7 +438,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
                  continue;
              }
              MobGroup grp = e.group;
-@@ -460,9 +464,9 @@
+@@ -466,9 +470,9 @@
              String cnt = learned + "/" + skills.size();
              int cw = this.font.width(cnt);
              String nm = this.font.plainSubstrByWidth(grp.displayName().getString(), sideW - 36 - cw - 6);
@@ -418,7 +450,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
              int pw = sideW - 36;
              int levels = kn.groupLevels(grp), max = skills.size() * Skill.MAX_LEVEL;
              g.fill(sideX + 29, ry + 16, sideX + 29 + pw, ry + 18, 0x22FFFFFF);
-@@ -506,7 +510,7 @@
+@@ -512,7 +516,7 @@
          int learned = 0;
          for (Skill s : skills) if (kn.level(s) > 0) learned++;
          Component sub = Component.translatable("mobslearn.screen.learned_skills", learned, skills.size());
@@ -427,7 +459,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
          int levels = kn.groupLevels(grp), maxLv = skills.size() * Skill.MAX_LEVEL;
          int pbx = tx + this.font.width(sub) + 8, pbw = Math.min(120, mainX + mainW - 14 - pbx);
          if (pbw > 20) {
-@@ -586,16 +590,16 @@
+@@ -592,16 +596,16 @@
          int tagX = x + cardW - 6;
          if (s.combat()) {
              tagX -= this.font.width("⚔");
@@ -447,7 +479,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
  
          double pts = world ? kn.intelligence() : kn.points(s);
          int next = s.nextThreshold(pts);
-@@ -611,7 +615,7 @@
+@@ -617,7 +621,7 @@
              if (p <= lvl) g.fill(sx, cy + 20, sx + 10, cy + 23, fade(GOLD, appear));
              else if (p == lvl + 1 && f > 0) Ui.fill(g, sx, cy + 20, 10 * f * appear, 3, fade(0x90000000 | (edge & 0xFFFFFF), appear));
          }
@@ -456,7 +488,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
          g.pose().popPose();
      }
  
-@@ -651,7 +655,7 @@
+@@ -657,7 +661,7 @@
              big(g, s.displayName(), x + pad + 50, y + pad + 2, 1.35f, fade(0xFFFFFFFF, p));
              int cx = x + pad + 50;
              Component grpName = s.group().displayName();
@@ -465,7 +497,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
              cx += this.font.width(grpName) + 6;
              if (s.combat()) cx = chip(g, Component.translatable("mobslearn.wiki.tag.pvp"), cx, y + pad + 16, RED, p);
              if (s.absurd()) cx = chip(g, Component.translatable("mobslearn.wiki.tag.absurd"), cx, y + pad + 16, PINK, p);
-@@ -660,10 +664,10 @@
+@@ -666,10 +670,10 @@
                  g.fill(sx, y + pad + 31, sx + 13, y + pad + 35, fade(i <= lvl ? GOLD : 0x30FFFFFF, p));
              }
              Component lv = lvl > 0 ? Component.translatable("mobslearn.screen.lvl", lvl, s.maxLevel()) : Component.translatable("mobslearn.screen.not_learned");
@@ -478,7 +510,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
          }
          int cy = y + pad + 50;
          cy = para(g, s.description(), x + pad, cy, iw, TEXT, p);
-@@ -683,13 +687,13 @@
+@@ -689,13 +693,13 @@
              boolean current = lvl == i;
              if (g != null) {
                  if (current) g.fill(x + pad - 4, cy - 2, x + w - pad + 4, cy + 20, fade(0x10FFFFFF, p));
@@ -496,7 +528,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
                  if (current) {
                      int prev = i == 0 ? 0 : s.thresholds()[i - 1];
                      float f = (float) Mth.clamp((pts - prev) / Math.max(1, th - prev), 0, 1);
-@@ -698,7 +702,7 @@
+@@ -704,7 +708,7 @@
                      Ui.fill(g, bx, cy + 12, bw * f * p, 3, fade(edge, p));
                      Component now = world ? Component.translatable("mobslearn.detail.now_world", (int) pts, th)
                          : Component.translatable("mobslearn.detail.now", (int) Math.floor(pts), th);
@@ -505,7 +537,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
                  }
              }
              cy += current ? 22 : 13;
-@@ -717,7 +721,7 @@
+@@ -723,7 +727,7 @@
          cy += 10;
          if (g != null) {
              Component close = Component.translatable("mobslearn.detail.close");
@@ -514,7 +546,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
          }
          cy += 10 + pad - 2;
          return cy - y;
-@@ -756,8 +760,8 @@
+@@ -762,8 +766,8 @@
                  g.fill(x + pad, top, x + pad + 22, top + 22, fade(0x248BE03A, local));
                  Ui.border(g, x + pad, top, 22, 22, fade(0x608BE03A, local));
                  if (local > 0.5f) g.renderItem(WikiIcons.stack(icons[i]), x + pad + 3, top + 3);
@@ -525,7 +557,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
              }
              ty += 11;
              ty = para(g, Component.translatable("mobslearn.help." + (i + 1) + ".text"), textX, ty, textW, DIM, local);
-@@ -774,9 +778,9 @@
+@@ -780,9 +784,9 @@
          for (int i = 0; i < 4; i++) {
              int lx = x + pad + (i % 2) * colW, ly = cy + (i / 2) * 12;
              if (g != null) {
@@ -537,7 +569,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
              }
          }
          cy += 26;
-@@ -786,7 +790,7 @@
+@@ -792,7 +796,7 @@
              float hv = hoverAnim("helpOk", hot);
              g.fill(bx, cy, bx + bw, cy + bh, fade(lerpColor(0xFF4E9A1E, 0xFF62B828, hv), p));
              Component ok = Component.translatable("mobslearn.help.ok");
@@ -546,7 +578,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
              helpOkRect = new int[]{bx, cy, bw, bh};
          }
          cy += bh + pad;
-@@ -796,21 +800,21 @@
+@@ -802,21 +806,21 @@
      private int chip(GuiGraphics g, Component c, int x, int y, int color, float p) {
          int w = this.font.width(c) + 6;
          g.fill(x, y, x + w, y + 11, fade(0x40000000 | (color & 0xFFFFFF), p));
@@ -571,7 +603,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
              y += 10;
          }
          return y;
-@@ -818,7 +822,7 @@
+@@ -824,7 +828,7 @@
  
      private int paraCentered(GuiGraphics g, Component c, int x, int y, int w, int color, float p) {
          for (FormattedCharSequence line : this.font.split(c, w)) {
@@ -580,7 +612,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
              y += 10;
          }
          return y;
-@@ -832,7 +836,7 @@
+@@ -838,7 +842,7 @@
          g.pose().pushPose();
          g.pose().translate(x, y, 0);
          g.pose().scale(scale, scale, 1);
@@ -589,9 +621,9 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/KnowledgeScreen.java b/src/ma
          g.pose().popPose();
      }
  
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java b/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java
---- a/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java	2026-10-28 19:44:34.103154449 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java	2026-10-28 19:44:34.154863919 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java b/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java	2026-11-19 03:12:49.671526504 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java	2026-11-19 03:12:49.719510130 +0000
 @@ -56,11 +56,15 @@
  
      @Override
@@ -608,9 +640,9 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/LanguageScreen.java b/src/mai
          float t = Math.max(0f, Math.min(1f, (Util.getMillis() - openedAt) / 240f));
          float intro = 1f - (float) Math.pow(1f - t, 3);
          g.pose().pushPose();
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java b/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java
---- a/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java	2026-10-28 19:44:34.106562720 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java	2026-10-28 19:44:34.155117234 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java b/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java
+--- a/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java	2026-11-19 03:12:49.674532266 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java	2026-11-19 03:12:49.719553037 +0000
 @@ -68,11 +68,11 @@
  
          ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
@@ -625,10 +657,61 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/MobsLearnClient.java b/src/ma
                      b -> client.setScreen(new KnowledgeScreen(screen))));
              }
          });
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/NoticeHud.java b/src/main/java/com/rrm/mobslearn/client/NoticeHud.java
---- a/src/main/java/com/rrm/mobslearn/client/NoticeHud.java	2026-10-28 19:44:33.894396979 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/NoticeHud.java	2026-10-28 19:44:34.154922804 +0000
-@@ -120,7 +120,7 @@
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/NemesisScreen.java b/src/main/java/com/rrm/mobslearn/client/NemesisScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/NemesisScreen.java	2026-11-19 03:12:49.682771748 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/NemesisScreen.java	2026-11-19 03:12:49.719645709 +0000
+@@ -172,7 +172,7 @@
+         if (foes.isEmpty()) {
+             Component empty = Component.translatable(received ? "mobslearn.nemesis.empty" : "mobslearn.settlements.loading");
+             for (FormattedCharSequence line : font.split(empty, w - 28)) {
+-                g.drawString(font, line, x + 14, y + 4, Ui.MUTED, false);
++                com.rrm.mobslearn.client.Ui.text(g, font, line, x + 14, y + 4, Ui.MUTED, false);
+                 y += 11;
+             }
+         }
+@@ -208,16 +208,16 @@
+                 }
+             }
+             Component name = name(f);
+-            g.drawString(font, name, x + 56, cy + 8, Anim.fade(living ? 0xFFFFFFFF : 0xFFB8B0A0, local), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, name, x + 56, cy + 8, Anim.fade(living ? 0xFFFFFFFF : 0xFFB8B0A0, local), false);
+             int chipX = x + 56 + font.width(name) + 6;
+             Component chip = Component.translatable("mobslearn.nemesis.state." + f.status);
+             int cw = font.width(chip) + 6;
+             g.fill(chipX, cy + 6, chipX + cw, cy + 17, Anim.fade(0x40000000 | (accent & 0xFFFFFF), local));
+-            g.drawString(font, chip, chipX + 3, cy + 8, Anim.fade(accent, local), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, chip, chipX + 3, cy + 8, Anim.fade(accent, local), false);
+             String skulls = "☠".repeat(Math.max(1, Math.min(5, f.rank))) + "·".repeat(Math.max(0, 5 - f.rank));
+-            g.drawString(font, Component.translatable("mobslearn.nemesis.rank", skulls), x + 56, cy + 21, Anim.fade(0xFFE5675F, local), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, Component.translatable("mobslearn.nemesis.rank", skulls), x + 56, cy + 21, Anim.fade(0xFFE5675F, local), false);
+             Component where = Component.translatable("mobslearn.nemesis.seen", f.x, f.y, f.z, Math.max(0, day - f.seen));
+-            g.drawString(font, where, x + 56, cy + 33, Anim.fade(0xFF8A8070, local), false);
++            com.rrm.mobslearn.client.Ui.text(g, font, where, x + 56, cy + 33, Anim.fade(0xFF8A8070, local), false);
+             if (!f.trophy.isEmpty() && local > 0.5f) {
+                 ItemStack trophy = Anim.stack(f.trophy, 1);
+                 int tx = x + w - 64;
+@@ -228,7 +228,7 @@
+             if (living && here.equals(f.dim)) {
+                 double ddx = f.x + 0.5 - px, ddz = f.z + 0.5 - pz;
+                 String d = Math.round(Math.sqrt(ddx * ddx + ddz * ddz)) + " m";
+-                g.drawString(font, d, x + w - 16 - font.width(d), cy + 33, Anim.fade(Ui.CREAM, local), false);
++                com.rrm.mobslearn.client.Ui.text(g, font, d, x + w - 16 - font.width(d), cy + 33, Anim.fade(Ui.CREAM, local), false);
+                 double angle = Math.toDegrees(Math.atan2(-ddx, ddz)) - yaw;
+                 String[] arrows = {"↑", "↗", "→", "↘", "↓", "↙", "←", "↖"};
+                 int idx = Math.floorMod((int) Math.round(angle / 45.0), 8);
+@@ -240,7 +240,7 @@
+                 for (Component c : info) {
+                     for (FormattedCharSequence s : font.split(c, w - 80)) {
+                         if (dy + 10 > cy + cardH) break;
+-                        g.drawString(font, s, x + 56, dy + 2, Anim.fade(Ui.CREAM, op * local), false);
++                        com.rrm.mobslearn.client.Ui.text(g, font, s, x + 56, dy + 2, Anim.fade(Ui.CREAM, op * local), false);
+                         dy += 10;
+                     }
+                     dy += 2;
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/NoticeHud.java b/src/main/java/com/rrm/mobslearn/client/NoticeHud.java
+--- a/src/main/java/com/rrm/mobslearn/client/NoticeHud.java	2026-11-19 03:12:49.540305816 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/NoticeHud.java	2026-11-19 03:12:49.719703599 +0000
+@@ -132,7 +132,7 @@
              current = null;
              return;
          }
@@ -637,7 +720,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/NoticeHud.java b/src/main/jav
          Font font = mc.font;
          Style st = current.style;
          List<FormattedCharSequence> lines = font.split(current.text, WIDTH - 66);
-@@ -152,10 +152,10 @@
+@@ -164,10 +164,10 @@
          else g.renderItem(new ItemStack(st.icon), 0, 0);
          g.pose().popPose();
          int tx = 54;
@@ -650,10 +733,40 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/NoticeHud.java b/src/main/jav
              ly += 10;
          }
          float life = Mth.clamp(1f - (age - IN) / (float) showFor, 0f, 1f);
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java b/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java
---- a/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java	2026-10-28 19:44:34.112163255 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java	2026-10-28 19:44:34.155163521 +0000
-@@ -130,11 +130,15 @@
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/RelationsMap.java b/src/main/java/com/rrm/mobslearn/client/RelationsMap.java
+--- a/src/main/java/com/rrm/mobslearn/client/RelationsMap.java	2026-11-19 03:12:49.536458477 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/RelationsMap.java	2026-11-19 03:12:49.719823108 +0000
+@@ -66,7 +66,7 @@
+         }
+         int ppx = ox + (int) Math.round((px - cx) * scale), ppz = oy + (int) Math.round((pz - cz) * scale);
+         g.fill(ppx - 2, ppz - 2, ppx + 3, ppz + 3, 0xFFFFFFFF);
+-        g.drawString(font, Component.translatable("mobslearn.map.you"), ppx + 5, ppz - 4, 0xFFFFFFFF, true);
++        com.rrm.mobslearn.client.Ui.text(g, font, Component.translatable("mobslearn.map.you"), ppx + 5, ppz - 4, 0xFFFFFFFF, true);
+         Component hoverName = null;
+         int hx = 0, hy = 0;
+         for (Node n : nodes) {
+@@ -84,7 +84,7 @@
+         if (hoverName != null) {
+             int tw = font.width(hoverName) + 8;
+             g.fill(hx - tw / 2, hy - 24, hx + tw / 2, hy - 12, 0xE0101810);
+-            g.drawString(font, hoverName, hx - tw / 2 + 4, hy - 22, 0xFFFFFFFF, false);
++            com.rrm.mobslearn.client.Ui.text(g, font, hoverName, hx - tw / 2 + 4, hy - 22, 0xFFFFFFFF, false);
+         }
+         if (shown == 0) Ui.center(g, font, Component.translatable("mobslearn.map.empty"), x + w / 2, oy - 4, Ui.MUTED);
+         String[] rels = {"war", "friend", "ally", "peace"};
+@@ -92,7 +92,7 @@
+         for (String r : rels) {
+             Component label = Component.translatable("mobslearn.map.rel." + r);
+             g.fill(lx, ly + 3, lx + 10, ly + 5, color(r));
+-            g.drawString(font, label, lx + 13, ly, Ui.CREAM, false);
++            com.rrm.mobslearn.client.Ui.text(g, font, label, lx + 13, ly, Ui.CREAM, false);
+             lx += font.width(label) + 24;
+         }
+         return h;
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java b/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java	2026-11-19 03:12:49.680926545 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java	2026-11-19 03:12:49.719682467 +0000
+@@ -198,11 +198,15 @@
  
      @Override
      public void renderBackground(GuiGraphics g, int mx, int my, float partial) {
@@ -667,18 +780,9 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java b/src/mai
      public void render(GuiGraphics g, int mx, int my, float partial) {
 +        mlBackground(g, mx, my, partial);
          long now = Util.getMillis();
-         if (sentAt != 0 && ClientKnowledge.revision() > sentRevision) {
-             Knowledge k = ClientKnowledge.get();
-@@ -158,7 +162,7 @@
-         String[] labels = {"enabled", "speed", "absurd", "combat", "difficulty", "warp"};
-         for (int i = 0; i < labels.length; i++) {
-             String label = font.plainSubstrByWidth(Component.translatable("mobslearn.settings." + labels[i]).getString(), w / 2 - 20);
--            g.drawString(font, label, x + 12, y + 38 + row * i, Ui.CREAM, false);
-+            com.rrm.mobslearn.client.Ui.text(g, font, label, x + 12, y + 38 + row * i, Ui.CREAM, false);
-         }
-         super.render(g, mx, my, partial);
-         g.pose().popPose();
-@@ -188,7 +192,7 @@
+         float dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
+         lastFrame = now;
+@@ -314,7 +318,7 @@
          }
  
          @Override
@@ -687,10 +791,10 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettingsScreen.java b/src/mai
              int x = getX(), y = getY(), w = getWidth();
              g.fill(x, y, x + w, y + 20, active ? 0xC0101410 : 0x80101010);
              Ui.border(g, x, y, w, 20, active && isHovered() ? Ui.GREEN : Ui.HAIRLINE);
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java b/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java
---- a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java	2026-10-28 19:44:34.108233424 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java	2026-10-28 19:44:34.155186783 +0000
-@@ -123,6 +123,9 @@
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java b/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java	2026-11-19 03:12:49.676255973 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java	2026-11-19 03:12:49.719804487 +0000
+@@ -141,6 +141,9 @@
  
      @Override
      public void renderBackground(GuiGraphics g, int mx, int my, float partial) {
@@ -700,7 +804,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java b/src/
          g.fillGradient(0, 0, width, height, 0xF00E150D, 0xFA080C08);
      }
  
-@@ -161,6 +164,7 @@
+@@ -187,6 +190,7 @@
  
      @Override
      public void render(GuiGraphics g, int mx, int my, float partial) {
@@ -708,7 +812,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java b/src/
          long now = Util.getMillis();
          dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
          lastFrame = now;
-@@ -181,7 +185,7 @@
+@@ -220,7 +224,7 @@
          if (rows.isEmpty()) {
              Component empty = Component.translatable(received ? "mobslearn.settlements.empty" : "mobslearn.settlements.loading");
              for (FormattedCharSequence line : font.split(empty, w - 28)) {
@@ -717,7 +821,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java b/src/
                  y += 11;
              }
          }
-@@ -212,30 +216,30 @@
+@@ -251,30 +255,30 @@
                  com.rrm.mobslearn.client.Ui.blitUV(g,com.rrm.mobslearn.MobsLearn.id("textures/gui/icon/" + icon(r) + ".png"), x + 16, cy + 7, x + 48, cy + 39, 0f, 1f, 0f, 1f);
              }
              Component name = Component.translatable(r.camp ? "mobslearn.settlements.kind.camp" : "mobslearn.settlements.kind." + r.kind);
@@ -754,7 +858,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java b/src/
                  Ui.scaledText(g, font, Component.literal("?"), x + w - 24, cy + 9, 1.6f, Anim.fade(0xFF6E6A5C, local), true, false);
              }
              if (op > 0.05f) {
-@@ -244,7 +248,7 @@
+@@ -283,7 +287,7 @@
                  for (Component c : info) {
                      for (FormattedCharSequence s : font.split(c, w - 80)) {
                          if (dy + 10 > cy + cardH) break;
@@ -763,7 +867,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java b/src/
                          dy += 10;
                      }
                      dy += 2;
-@@ -255,7 +259,7 @@
+@@ -294,7 +298,7 @@
                      boolean fh = mx >= fx && mx < fx + fw && my >= fy && my < fy + 13;
                      g.fill(fx, fy, fx + fw, fy + 13, Anim.fade(fh ? 0x60E5534B : 0x30E5534B, op));
                      Ui.border(g, fx, fy, fw, 13, Anim.fade(fh ? Ui.RED : 0x60E5534B, op));
@@ -772,9 +876,9 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/SettlementsScreen.java b/src/
                      forgetHits.add(new int[]{i, fx, fy, fw, 13});
                  }
              }
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/Ui.java b/src/main/java/com/rrm/mobslearn/client/Ui.java
---- a/src/main/java/com/rrm/mobslearn/client/Ui.java	2026-10-28 19:44:33.888506272 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/Ui.java	2026-10-28 19:44:34.155147943 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/Ui.java b/src/main/java/com/rrm/mobslearn/client/Ui.java
+--- a/src/main/java/com/rrm/mobslearn/client/Ui.java	2026-11-19 03:12:49.535272177 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/Ui.java	2026-11-19 03:12:49.719724952 +0000
 @@ -103,7 +103,7 @@
          g.pose().translate(x, y, 0);
          g.pose().scale(scale, scale, 1);
@@ -845,9 +949,9 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/Ui.java b/src/main/java/com/r
      public static void slot(GuiGraphics g, int x, int y, int size) {
          g.fill(x, y, x + size, y + size, 0x40000000);
      }
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java b/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java
---- a/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java	2026-10-28 19:44:33.927653664 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java	2026-10-28 19:44:34.154970707 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java b/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java
+--- a/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java	2026-11-19 03:12:49.567436092 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin.java	2026-11-19 03:12:49.719617166 +0000
 @@ -25,7 +25,7 @@
              MobsLearnRules.set(state.getGameRules(), enabled, null);
              button.setMessage(mobslearn$toggleLabel(enabled));
@@ -857,8 +961,8 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/mixin/CreateWorldGameTabMixin
          int[] rows = {0};
          layout.visitChildren(child -> rows[0]++);
          layout.addChild(toggle, rows[0], 0);
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java b/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java
---- a/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java	2026-10-28 19:44:33.925746095 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java b/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java
+--- a/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java	2026-11-19 03:12:49.566226702 +0000
 +++ b/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java	1970-01-01 00:00:00.000000000 +0000
 @@ -1,30 +0,0 @@
 -package com.rrm.mobslearn.client.mixin;
@@ -891,10 +995,10 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/mixin/ZombieModelMixin.java b
 -        part.zRot = 0f;
 -    }
 -}
-diff -ruN a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java b/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java
---- a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java	2026-10-28 19:44:34.121669741 +0000
-+++ b/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java	2026-10-28 19:44:34.155014848 +0000
-@@ -250,11 +250,15 @@
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java b/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java
+--- a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java	2026-11-19 03:12:49.690602839 +0000
++++ b/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java	2026-11-19 03:12:49.719759049 +0000
+@@ -253,11 +253,15 @@
  
      @Override
      public void renderBackground(GuiGraphics g, int mx, int my, float a) {
@@ -910,7 +1014,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java b/src/ma
          long now = Util.getMillis();
          dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
          lastFrame = now;
-@@ -348,7 +352,7 @@
+@@ -351,7 +355,7 @@
              boolean hot = mouseY < NAV_H && mouseX >= x && mouseX < x + w + 14;
              boolean act = ids[i].equals(active);
              navLinks.add(new NavLink(ids[i], x, w + 14));
@@ -919,7 +1023,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java b/src/ma
              if (act) {
                  float tx = x + 7, tw = w;
                  if (navUnderX < 0) {
-@@ -397,18 +401,18 @@
+@@ -400,18 +404,18 @@
      }
  
      void text(GuiGraphics g, Component c, int x, int y, int color, float alpha) {
@@ -941,7 +1045,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java b/src/ma
              }
              y += 11;
          }
-@@ -424,7 +428,7 @@
+@@ -427,7 +431,7 @@
          g.pose().translate(x, y, 0);
          g.pose().scale(scale, scale, 1);
          int dx = center ? -this.font.width(c) / 2 : 0;
@@ -950,7 +1054,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java b/src/ma
          g.pose().popPose();
      }
  
-@@ -1379,9 +1383,9 @@
+@@ -1382,9 +1386,9 @@
                  Ui.border(g, nx - 4, ly - 4, 9, 9, a(c, alpha));
                  if (done) g.fill(nx - 2, ly - 2, nx + 3, ly + 3, a(GOLD, alpha));
                  String roman = i == 0 ? "I" : i == 1 ? "II" : "III";
@@ -962,28 +1066,28 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/client/wiki/WikiScreen.java b/src/ma
              }
          }
  
-diff -ruN a/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java b/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java
---- a/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java	2026-10-28 19:44:34.096152151 +0000
-+++ b/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java	2026-10-28 19:44:34.155430320 +0000
-@@ -60,7 +60,7 @@
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java b/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java
+--- a/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java	2026-11-19 03:12:49.665245262 +0000
++++ b/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java	2026-11-19 03:12:49.719874012 +0000
+@@ -65,7 +65,7 @@
                  knowledge.readJson(json);
              }
-         } catch (Exception e) { MobsLearn.LOG.error("[MobsLearn] Failed to read knowledge", e); }
+         } catch (Exception e) { MobsLearn.LOG.error("Can't read knowledge", e); }
 -        knowledge.enabled = MobsLearnRules.get(s.getGameRules());
 +        knowledge.enabled = MobsLearnRules.get(s.getWorldData().getGameRules());
-         MobsLearn.LOG.info("[MobsLearn] World intelligence: {}%, enabled: {}", knowledge.intelligence(), knowledge.enabled);
      }
-     public static void stop() { save(); server = null; travelers.clear(); Learning.reset(); }
-@@ -130,7 +130,7 @@
-         knowledge.absurd = settings.absurd(); knowledge.combat = settings.combat();
-         knowledge.difficulty = Math.max(0, Math.min(2, settings.difficulty())); knowledge.enabled = settings.enabled();
+     public static void stop() { save(); com.rrm.mobslearn.mob.Saga.stop(); DialogueMemory.stop(); Talk.reset(); server = null; travelers.clear(); Learning.reset(); }
+     public static void save() {
+@@ -139,7 +139,7 @@
+         knowledge.villages = settings.villages();
+         knowledge.setFlags(settings.flags());
          com.rrm.mobslearn.mob.Colonies.setWarp(settings.warp());
 -        MobsLearnRules.set(server.getGameRules(), knowledge.enabled, server);
 +        MobsLearnRules.set(server.getWorldData().getGameRules(), knowledge.enabled, server);
          com.rrm.mobslearn.mob.Behaviors.reset();
          for (ServerLevel level : server.getAllLevels()) Traits.refreshSettings(level);
          save(); syncAll();
-@@ -193,7 +193,7 @@
+@@ -218,7 +218,7 @@
          if (server == null) return;
          ticks++;
          if (ticks % 20 == 0) {
@@ -992,10 +1096,10 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/learn/WorldBrain.java b/src/main/jav
              if (enabled != knowledge.enabled) {
                  knowledge.enabled = enabled;
                  com.rrm.mobslearn.mob.Behaviors.reset();
-diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Behaviors.java b/src/main/java/com/rrm/mobslearn/mob/Behaviors.java
---- a/src/main/java/com/rrm/mobslearn/mob/Behaviors.java	2026-10-28 19:44:34.081953749 +0000
-+++ b/src/main/java/com/rrm/mobslearn/mob/Behaviors.java	2026-10-28 19:44:34.155947920 +0000
-@@ -231,7 +231,7 @@
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/mob/Behaviors.java b/src/main/java/com/rrm/mobslearn/mob/Behaviors.java
+--- a/src/main/java/com/rrm/mobslearn/mob/Behaviors.java	2026-11-19 03:12:49.642573056 +0000
++++ b/src/main/java/com/rrm/mobslearn/mob/Behaviors.java	2026-11-19 03:12:49.720076609 +0000
+@@ -298,7 +298,7 @@
                      && mob.distanceTo(targetPlayer) > 3 && r.nextFloat() < 0.04f * lvl) {
                      Vec3 look = targetPlayer.getLookAngle();
                      Vec3 dest = targetPlayer.position().subtract(look.x * 2, 0, look.z * 2);
@@ -1004,7 +1108,7 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Behaviors.java b/src/main/java/c
                  }
              }
              case COW -> {
-@@ -461,7 +461,7 @@
+@@ -530,7 +530,7 @@
              later(8, () -> {
                  if (!en.isAlive() || !p.isAlive()) return;
                  Vec3 look = p.getLookAngle();
@@ -1013,9 +1117,9 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Behaviors.java b/src/main/java/c
                      later(6, () -> {
                          if (en.isAlive() && p.isAlive() && en.distanceTo(p) < 3.5) Combat.critHit(level, en, p, 1.15);
                      });
-diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Combat.java b/src/main/java/com/rrm/mobslearn/mob/Combat.java
---- a/src/main/java/com/rrm/mobslearn/mob/Combat.java	2026-10-28 19:44:34.093017446 +0000
-+++ b/src/main/java/com/rrm/mobslearn/mob/Combat.java	2026-10-28 19:44:34.155604757 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/mob/Combat.java b/src/main/java/com/rrm/mobslearn/mob/Combat.java
+--- a/src/main/java/com/rrm/mobslearn/mob/Combat.java	2026-11-19 03:12:49.662186321 +0000
++++ b/src/main/java/com/rrm/mobslearn/mob/Combat.java	2026-11-19 03:12:49.720117795 +0000
 @@ -113,7 +113,7 @@
              mob.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 50 + 10 * lvl, lvl >= 3 ? 1 : 0));
              if (mob instanceof EnderMan en) {
@@ -1025,9 +1129,9 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Combat.java b/src/main/java/com/
                  }
              }
          }
-diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Compat.java b/src/main/java/com/rrm/mobslearn/mob/Compat.java
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/mob/Compat.java b/src/main/java/com/rrm/mobslearn/mob/Compat.java
 --- a/src/main/java/com/rrm/mobslearn/mob/Compat.java	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/main/java/com/rrm/mobslearn/mob/Compat.java	2026-10-28 19:44:34.155692619 +0000
++++ b/src/main/java/com/rrm/mobslearn/mob/Compat.java	2026-11-19 03:12:49.720298048 +0000
 @@ -0,0 +1,17 @@
 +package com.rrm.mobslearn.mob;
 +
@@ -1046,9 +1150,51 @@ diff -ruN a/src/main/java/com/rrm/mobslearn/mob/Compat.java b/src/main/java/com/
 +        };
 +    }
 +}
-diff -ruN a/src/main/resources/mobslearn.client.mixins.json b/src/main/resources/mobslearn.client.mixins.json
---- a/src/main/resources/mobslearn.client.mixins.json	2026-10-28 19:44:33.446799994 +0000
-+++ b/src/main/resources/mobslearn.client.mixins.json	2026-10-28 19:44:34.160035205 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/java/com/rrm/mobslearn/mob/Doors.java b/src/main/java/com/rrm/mobslearn/mob/Doors.java
+--- a/src/main/java/com/rrm/mobslearn/mob/Doors.java	1970-01-01 00:00:00.000000000 +0000
++++ b/src/main/java/com/rrm/mobslearn/mob/Doors.java	2026-11-19 03:12:49.720780337 +0000
+@@ -0,0 +1,38 @@
++package com.rrm.mobslearn.mob;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.tags.BlockTags;
++import net.minecraft.world.entity.LivingEntity;
++import net.minecraft.world.entity.Mob;
++import net.minecraft.world.level.block.DoorBlock;
++import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.phys.AABB;
++
++public final class Doors {
++    private Doors() {
++    }
++
++    public static void residentTick(ServerLevel level, Mob mob, long t) {
++        if (!Colonies.resident(mob)) return;
++        BlockPos base = mob.blockPosition();
++        for (BlockPos p : BlockPos.betweenClosed(base.offset(-1, 0, -1), base.offset(1, 1, 1))) {
++            BlockState s = level.getBlockState(p);
++            if (!(s.getBlock() instanceof DoorBlock door) || !s.is(BlockTags.WOODEN_DOORS) || s.getValue(DoorBlock.OPEN)) continue;
++            BlockPos at = p.immutable();
++            door.setOpen(mob, level, s, at, true);
++            Behaviors.later(40, () -> close(level, at));
++            return;
++        }
++    }
++
++    private static void close(ServerLevel level, BlockPos at) {
++        BlockState s = level.getBlockState(at);
++        if (!(s.getBlock() instanceof DoorBlock door) || !s.getValue(DoorBlock.OPEN)) return;
++        if (!level.getEntitiesOfClass(LivingEntity.class, new AABB(at).inflate(1.2)).isEmpty()) {
++            Behaviors.later(30, () -> close(level, at));
++            return;
++        }
++        door.setOpen(null, level, s, at, false);
++    }
++}
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/resources/mobslearn.client.mixins.json b/src/main/resources/mobslearn.client.mixins.json
+--- a/src/main/resources/mobslearn.client.mixins.json	2026-11-19 03:12:49.132514739 +0000
++++ b/src/main/resources/mobslearn.client.mixins.json	2026-11-19 03:12:49.806067062 +0000
 @@ -2,7 +2,12 @@
    "required": true,
    "minVersion": "0.8",
@@ -1067,9 +1213,9 @@ diff -ruN a/src/main/resources/mobslearn.client.mixins.json b/src/main/resources
 +  }
 +}
 \ No newline at end of file
-diff -ruN a/src/main/resources/mobslearn.mixins.json b/src/main/resources/mobslearn.mixins.json
---- a/src/main/resources/mobslearn.mixins.json	2026-10-28 19:44:33.446815078 +0000
-+++ b/src/main/resources/mobslearn.mixins.json	2026-10-28 19:44:34.156077691 +0000
+diff -ruN -x '*.orig' -x '*.rej' a/src/main/resources/mobslearn.mixins.json b/src/main/resources/mobslearn.mixins.json
+--- a/src/main/resources/mobslearn.mixins.json	2026-11-19 03:12:49.132526041 +0000
++++ b/src/main/resources/mobslearn.mixins.json	2026-11-19 03:12:49.806020620 +0000
 @@ -2,7 +2,7 @@
    "required": true,
    "minVersion": "0.8",
@@ -1078,8 +1224,8 @@ diff -ruN a/src/main/resources/mobslearn.mixins.json b/src/main/resources/mobsle
 +  "compatibilityLevel": "JAVA_21",
    "mixins": [
      "CreeperAccessor",
-     "EndermanMixin"
-@@ -10,4 +10,4 @@
+     "EndermanMixin",
+@@ -11,4 +11,4 @@
    "injectors": {
      "defaultRequire": 1
    }

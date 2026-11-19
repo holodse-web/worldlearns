@@ -52,7 +52,7 @@ public final class ModLanguage {
             JsonObject object = JsonParser.parseReader(reader).getAsJsonObject();
             if (object.has("language")) selected = validate(object.get("language").getAsString());
         } catch (Exception e) {
-            MobsLearn.LOG.warn("Could not read the local World Learns language; using Minecraft's language", e);
+            MobsLearn.LOG.warn("Can't read language setting", e);
         }
     }
 
@@ -102,7 +102,7 @@ public final class ModLanguage {
             }
             return true;
         } catch (Exception e) {
-            MobsLearn.LOG.warn("World Learns language applies this session, but the local preference could not be saved", e);
+            MobsLearn.LOG.warn("Can't save language setting", e);
             return false;
         } finally {
             if (temporary != null) {
@@ -145,13 +145,13 @@ public final class ModLanguage {
         try (InputStream input = ModLanguage.class.getResourceAsStream("/assets/mobslearn/" + path)) {
             if (input != null) Language.loadFromJson(input, (key, value) -> { if (owns(key)) target.put(key, value); });
         } catch (Exception e) {
-            MobsLearn.LOG.warn("Could not read bundled World Learns translations for {}", code, e);
+            MobsLearn.LOG.warn("Can't read translations: {}", code, e);
         }
         for (Resource resource : manager.getResourceStack(MobsLearn.id(path))) {
             try (InputStream input = resource.open()) {
                 Language.loadFromJson(input, (key, value) -> { if (owns(key)) target.put(key, value); });
             } catch (Exception e) {
-                MobsLearn.LOG.warn("Could not read World Learns translations for {} from {}", code, resource.sourcePackId(), e);
+                MobsLearn.LOG.warn("Can't read translations: {} ({})", code, resource.sourcePackId(), e);
             }
         }
     }

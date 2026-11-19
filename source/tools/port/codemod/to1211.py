@@ -1,6 +1,7 @@
 import re, os, sys
 root = sys.argv[1]
 R = [
+    (r'\.dropLeash\(\)', '.dropLeash(true, true)'),
     (r'\.create\(level, EntitySpawnReason\.\w+\)', '.create(level)'),
     (r'import net\.minecraft\.world\.entity\.EntitySpawnReason;\n', ''),
     (r'BuiltInRegistries\.(\w+)\.getValue\(', r'BuiltInRegistries.\1.get('),

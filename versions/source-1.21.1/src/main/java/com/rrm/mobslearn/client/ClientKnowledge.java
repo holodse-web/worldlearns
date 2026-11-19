@@ -43,6 +43,9 @@ public final class ClientKnowledge {
         knowledge.journal.clear();
         knowledge.chronicle.clear();
         knowledge.speed = 1.0;
+        knowledge.settlementSpeed = 1.0;
+        knowledge.villages = true;
+        knowledge.setFlags(-1);
         knowledge.absurd = knowledge.combat = knowledge.enabled = true;
         knowledge.difficulty = 1;
         canConfigure = false;

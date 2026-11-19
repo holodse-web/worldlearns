@@ -41,6 +41,15 @@ public enum Trigger {
     CHAT_NEAR,
     SEE_DOOR,
     KILL_UNDERGROUND,
+    DRAGON_BEDS,
+    DRAGON_CRYSTALS,
+    DRAGON_PILLAR,
+    WITHER_HIDE,
+    WITHER_DOWN,
+    WARDEN_SNEAK,
+    WARDEN_ESCAPE,
+    GUARDIAN_DOWN,
+    GUARDIAN_MINE,
     WORLD;
 
     public Component describe() {

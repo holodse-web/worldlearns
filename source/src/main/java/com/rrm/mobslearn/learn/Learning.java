@@ -145,6 +145,7 @@ public final class Learning {
     public static InteractionResult useBlock(Player p, Level level, InteractionHand hand, BlockHitResult hit) {
         if (!WorldBrain.get().enabled) return InteractionResult.PASS;
         if (level.isClientSide() || !(level instanceof ServerLevel sl)) return InteractionResult.PASS;
+        com.rrm.mobslearn.mob.Saga.useBlock(p, level, hand, hit);
         ItemStack stack = p.getItemInHand(hand);
         if (stack.getItem() instanceof net.minecraft.world.item.BlockItem bi && !p.isCreative() && !p.isSpectator()) {
             net.minecraft.core.BlockPos clicked = hit.getBlockPos();
@@ -224,14 +225,11 @@ public final class Learning {
         return best;
     }
 
-    // Creepers and spiders only track a player within ~16 blocks (less while the world is still "dumb"),
-    // so a fixed 22-block check never fired for them. Scale with the mob's real follow range instead.
     private static double escapeDistance(Mob mob) {
         double range = mob.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE);
         return Math.max(8.0, Math.min(22.0, range * 0.8));
     }
 
-    /** Called when a hostile mob drops its player target: if the player got away (not died / not creative), count an escape. */
     public static void observeLostTarget(ServerLevel level, Mob mob, Player p, MobGroup g) {
         chase.remove(mob.getUUID());
         if (!WorldBrain.get().enabled || p == null || !p.isAlive() || p.isCreative() || p.isSpectator() || p.level() != level) return;

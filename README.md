@@ -1,42 +1,59 @@
 # World Learns
 
-A Minecraft Fabric mod by **RRM Network**. Mobs learn from player actions, while villages and monster settlements grow, form alliances and go to war.
+A Minecraft mod for Fabric and NeoForge by **RRM Network**. Mobs learn from your actions. Settlements grow, form alliances and go to war. Enemies remember you and can come after your home.
 
-> **Back up your entire world before installing, updating or removing the mod.** Construction changes real blocks.
+> **Back up your entire world before installing, updating or removing the mod.** Construction, raids and marches change real blocks.
+
+## Download World Learns 1.2.0
+
+Choose the row for your Minecraft version and download the JAR for your loader. Each Minecraft version links to its release notes.
+
+| Minecraft | Java | Fabric | NeoForge |
+| --- | --- | --- | --- |
+| [26.3](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B26.3) | 25+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B26.3/worldlearns-1.2.0%2B26.3.jar) | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B26.3/worldlearns-1.2.0%2B26.3-neoforge.jar) |
+| [1.21.4](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B1.21.4) | 21+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.4/worldlearns-1.2.0%2B1.21.4.jar) | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.4/worldlearns-1.2.0%2B1.21.4-neoforge.jar) |
+| [1.21.1](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B1.21.1) | 21+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.1/worldlearns-1.2.0%2B1.21.1.jar) | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.21.1/worldlearns-1.2.0%2B1.21.1-neoforge.jar) |
+| [1.20.1](https://github.com/holodse-web/worldlearns/releases/tag/v1.2.0%2B1.20.1) | 17+ | [Download](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.20.1/worldlearns-1.2.0%2B1.20.1.jar) | [Download legacy build](https://github.com/holodse-web/worldlearns/releases/download/v1.2.0%2B1.20.1/worldlearns-1.2.0%2B1.20.1-neoforge.jar) |
+
+See the [changelog](CHANGELOG.md#120) for more on what changed in 1.2.0.
 
 ## Features
 
 - Persistent world and regional learning based on combat, equipment, building and interactions.
-- New combat, movement, construction, defensive and humorous behaviors for supported vanilla mobs.
+- New combat, movement, construction, defensive and humorous behaviors for supported vanilla mobs, including squids, fish, rabbits, cats, parrots, horses, wolves, bees, chickens, golems, phantoms, witches, slimes and pillagers.
 - Growing villages and zombie, skeleton and creeper settlements, with leaders, trade, raids and relationships.
+- Pillager outposts, witch covens, settlements in the Nether and Enderman cities in the End.
+- World events: sworn enemies who remember you, raids on your home, a great march of united settlements, captives you can interrogate, mercenaries and village allies, frame-up banners and knowledge hearths.
+- Bosses remember too: the Ender Dragon, Wither, Warden and Elder Guardian adapt to how they were beaten.
 - Villager gossip, player reputation and crafting questions for defensive skills.
-- Mob Knowledge (**K**), a world journal, settlement browser, settings, advancements and an in-game wiki.
+- Look at a nearby mob and speak in chat. Ask “Remember?” to hear its last exchange with you.
+- Mob Knowledge (**K**), a world journal, settlement browser, sworn-enemies screen, settings, advancements and an in-game wiki.
 - Separate interface language selection: English, Russian, Ukrainian, German, French and Spanish.
 - Optional AI villager dialogue, disabled by default; built-in replies need no external service.
 
-## Versions and requirements
+## Loader requirements
 
-Current mod version: **1.1.0**, with a Minecraft version suffix. Internal mod ID: `mobslearn`.
+The mod ID is `mobslearn`.
 
-| Minecraft | Java | Fabric Loader minimum | Fabric API minimum | Source |
+| Minecraft | Fabric Loader minimum | Fabric API minimum | NeoForge minimum | Source |
 | --- | --- | --- | --- | --- |
-| 26.3 | 25 | 0.19.5 | 0.162.0 | [`source`](source/) |
-| 1.21.4 | 21 | 0.16.9 | 0.115.0 | [`versions/source-1.21.4`](versions/source-1.21.4/) |
-| 1.21.1 | 21 | 0.16.0 | 0.100.0 | [`versions/source-1.21.1`](versions/source-1.21.1/) |
-| 1.20.1 | 17 | 0.14.21 | 0.87.0 | [`versions/source-1.20.1`](versions/source-1.20.1/) |
+| 26.3 | 0.19.5 | 0.162.0 | 26.3.0.103 | [`source`](source/) |
+| 1.21.4 | 0.16.9 | 0.115.0 | 21.4.161 | [`versions/source-1.21.4`](versions/source-1.21.4/) |
+| 1.21.1 | 0.16.0 | 0.100.0 | 21.1.266 | [`versions/source-1.21.1`](versions/source-1.21.1/) |
+| 1.20.1 | 0.14.21 | 0.87.0 | 47.1.106 (legacy) | [`versions/source-1.20.1`](versions/source-1.20.1/) |
 
-These are declared minimums from each build's metadata, not a claim that every possible dependency combination has been tested. Use a Fabric API release for the exact Minecraft version. Forge and NeoForge builds are not provided.
+Use a Fabric API release for your exact Minecraft version. The alternate build for Minecraft 1.20.1 targets [NeoForged's legacy 47.1.106 line](https://maven.neoforged.net/releases/net/neoforged/forge/1.20.1-47.1.106/).
 
 ## Install and play
 
 1. Back up the complete world folder.
-2. Install the matching Fabric Loader and Fabric API.
+2. Install the matching NeoForge version, or Fabric Loader and Fabric API.
 3. Put the World Learns JAR for your Minecraft version in `mods`.
 4. Open a world, press **K**, and review the wiki and settings.
 
-For the complete multiplayer experience, install matching versions on the server and clients. Gameplay runs on the server; the client provides the interface and notifications. Dedicated-server and mixed-client behavior still needs runtime validation.
+For multiplayer, install matching versions on the server and every client. Gameplay runs on the server; the client provides the interface and notifications. Clients without the mod have not been tested.
 
-World owners and operators can adjust learning, difficulty, combat and humorous skills, and simulation speed. Building and digging obey `mobGriefing`. Unknown custom mob types do not automatically receive skills.
+World owners and operators can adjust learning, difficulty, combat, humorous skills, simulation speed and settlement growth. The **Settlements** master switch turns every settlement off at once while learning keeps working; **Villager settlements** controls villages only. Sworn enemies, home raids, boss memory and the great march have their own switches on the **World events** tab. Building and digging obey `mobGriefing`. Unknown custom mob types do not automatically receive skills.
 
 The name changed from Mobs Learn to World Learns; the internal ID remains `mobslearn`. This does not guarantee that every older save can be migrated safely: keep a backup.
 
@@ -53,13 +70,14 @@ Commands require operator permissions or cheats in single-player.
 | `/mobslearn speed <multiplier>` | Adjust learning speed. |
 | `/mobslearn timewarp <multiplier>` | Adjust simulation speed. |
 | `/mobslearn settlement list` | List settlements. |
-| `/mobslearn settlement zombie` | Create a zombie settlement; `village`, `skeleton` and `creeper` are also available. |
+| `/mobslearn settlement zombie` | Found a settlement. Other types are `village`, `skeleton`, `creeper`, `pillager`, `witch`, `nether` and `enderman`. |
+| `/mobslearn event march\|raid\|nemesis` | Start a great march, a raid on your home or a sworn enemy right away. |
 
 `reset` does **not** undo terrain changes or remove settlements. Use a world backup to restore the previous world state.
 
 ## Optional AI dialogue and privacy
 
-The ordinary learning system uses game logic and does not require an AI service. Built-in villager replies work without an account or key.
+Built-in mob replies work without an account or key. The world stores recent exchanges for each mob and player in `mobslearn_dialogues.json`.
 
 AI dialogue is disabled by default. A world owner or operator can configure an OpenAI-compatible endpoint, including a local Ollama instance. The default remote preset is Groq; OpenRouter and Ollama presets are also available. When enabled, the mod sends the addressed message, up to eight previous conversation messages, player and villager display names, the villager's profession and attitude, and a dialogue prompt to that endpoint. Names and messages are not anonymized. Remote providers may charge for requests and process the data under their own terms. Review the selected provider's privacy and data-processing terms, and inform players before enabling this on a server.
 
@@ -78,7 +96,15 @@ If `JAVA_HOME` or `javac.exe` on `PATH` already points to the correct JDK, omit 
 
 Output: `source/build/libs/mobslearn-<version>.jar`. Distribution filenames use `worldlearns-<version>.jar`; the metadata identifies the mod in either case. Dependencies are not bundled in the mod JAR.
 
-Older-version source snapshots and the original porting tools are included. The shell build/port scripts depend on their original development environment and local dependency archives, which are excluded from this repository; they are not portable build instructions for a fresh clone.
+The older Fabric source snapshots and their porting scripts are included. These scripts use local Minecraft, mappings and Fabric API archives from the original build environment.
+
+Build a NeoForge JAR with Gradle 9.x from the repository root. Use the Java version in the table above and have Python on `PATH`.
+
+```powershell
+gradle -p source/tools/neoforge -PminecraftVersion=1.21.1 build
+```
+
+The JAR is written to `source/tools/neoforge/build/<minecraftVersion>/libs/`.
 
 ## Repository contents
 
@@ -90,7 +116,7 @@ Build outputs, Minecraft and dependency JARs, caches, backups, runtime configura
 
 ## Validation and bug reports
 
-Runtime compatibility, dedicated-server behavior and save migration still need in-game testing.
+Dedicated-server startup was smoke-tested during development. Compatibility with other mods, clients without the mod and migration of older saves still need testing.
 
 Report the game/mod/Loader/API versions, steps to reproduce, installed mods and relevant logs. Remove keys, chat content and other private data before sharing.
 

@@ -1,0 +1,76 @@
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version '2.0.148' apply false
+    id 'net.neoforged.moddev.legacyforge' version '2.0.148' apply false
+}
+
+def targets = [
+    '26.3': ['26.3.0.103', 25],
+    '1.21.4': ['21.4.161', 21],
+    '1.21.1': ['21.1.266', 21],
+    '1.20.1': ['1.20.1-47.1.106', 17]
+]
+def minecraftVersion = providers.gradleProperty('minecraftVersion').getOrElse('26.3')
+def target = targets[minecraftVersion]
+if (target == null) throw new GradleException("Unsupported Minecraft version ${minecraftVersion}")
+def legacy = minecraftVersion == '1.20.1'
+def sourceRoot = file(minecraftVersion == '26.3' ? '../..' : "../../../versions/source-${minecraftVersion}")
+def fabricMetadata = new groovy.json.JsonSlurper().parse(new File(sourceRoot, 'src/main/resources/fabric.mod.json'))
+def serverRun = {
+    server()
+    gameDirectory = layout.projectDirectory.dir("run/${minecraftVersion}")
+    programArgument '--nogui'
+}
+
+group = 'com.rrm'
+version = "${fabricMetadata.version}-neoforge"
+base.archivesName = 'worldlearns'
+layout.buildDirectory = layout.projectDirectory.dir("build/${minecraftVersion}")
+java.toolchain.languageVersion = JavaLanguageVersion.of(target[1])
+
+def prepared = layout.buildDirectory.dir('sources')
+def prepareSources = tasks.register('prepareSources', Exec) {
+    inputs.dir(new File(sourceRoot, 'src/main'))
+    inputs.file('prepare.py')
+    inputs.dir('templates')
+    inputs.property('minecraftVersion', minecraftVersion)
+    inputs.property('neoForgeVersion', target[0])
+    outputs.dir(prepared)
+    commandLine providers.gradleProperty('python').getOrElse('python'), file('prepare.py'), minecraftVersion, target[0], sourceRoot, prepared.get().asFile
+}
+sourceSets.main.java.setSrcDirs([prepared.map { it.dir('java') }])
+sourceSets.main.resources.setSrcDirs([prepared.map { it.dir('resources') }])
+tasks.named('compileJava') { dependsOn prepareSources }
+tasks.named('processResources') { dependsOn prepareSources }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+if (legacy) {
+    apply plugin: 'net.neoforged.moddev.legacyforge'
+    legacyForge {
+        enable {
+            neoForgeVersion = target[0]
+            disableRecompilation = true
+        }
+        mods { mobslearn { sourceSet(sourceSets.main) } }
+        runs { server serverRun }
+    }
+    dependencies { annotationProcessor 'org.spongepowered:mixin:0.8.5:processor' }
+    mixin {
+        add sourceSets.main, 'mobslearn.refmap.json'
+        config 'mobslearn.mixins.json'
+        config 'mobslearn.client.mixins.json'
+    }
+    tasks.named('jar') {
+        manifest.attributes 'MixinConfigs': 'mobslearn.mixins.json,mobslearn.client.mixins.json'
+    }
+} else {
+    apply plugin: 'net.neoforged.moddev'
+    neoForge {
+        enable {
+            version = target[0]
+            disableRecompilation = true
+        }
+        mods { mobslearn { sourceSet(sourceSets.main) } }
+        runs { server serverRun }
+    }
+}

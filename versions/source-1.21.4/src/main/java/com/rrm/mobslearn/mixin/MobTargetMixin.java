@@ -8,7 +8,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Peaceful settlement residents must not even acquire a player as a target (vanilla bow charge survives a cleared target). */
 @Mixin(Mob.class)
 public abstract class MobTargetMixin {
     @Inject(method = "setTarget", at = @At("HEAD"), cancellable = true)

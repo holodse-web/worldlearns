@@ -62,7 +62,7 @@ public final class Camps {
         String kind, dim, colony, crew;
         int lvl, oldLvl, x, y, z, step, rot, style;
         long idle;
-        boolean done;
+        boolean done, visible;
         final Map<Long, Integer> bases = new HashMap<>();
         transient List<Op> plan;
         transient long nextPlace, stallSince;
@@ -71,10 +71,9 @@ public final class Camps {
         transient int preparingStep = -1, lifts;
         transient long preparedAt, jumpedAt;
         transient BlockPos liftFeet;
-        transient boolean rush;
+        boolean rush;
     }
 
-    /** Blocks settlements may place per server tick (normal building) — instant/time-warp building gets 32x that. */
     private static int budget, rushBudget;
     private static long budgetTick = -1;
 
@@ -129,6 +128,7 @@ public final class Camps {
     public static void start(MinecraftServer s) {
         server = s;
         camps.clear();
+        anyRush = false;
         try {
             Path f = file();
             if (!Files.isRegularFile(f)) return;
@@ -146,6 +146,9 @@ public final class Camps {
                 camp.z = c.get("z").getAsInt();
                 camp.step = c.has("step") ? c.get("step").getAsInt() : 0;
                 camp.done = c.has("done") && c.get("done").getAsBoolean();
+                camp.visible = c.has("visible") && c.get("visible").getAsBoolean();
+                camp.rush = !camp.done && c.has("rush") && c.get("rush").getAsBoolean();
+                anyRush |= camp.rush;
                 camp.colony = c.has("colony") ? c.get("colony").getAsString() : null;
                 camp.crew = c.has("crew") ? c.get("crew").getAsString() : null;
                 camp.rot = c.has("rot") ? c.get("rot").getAsInt() : 0;
@@ -159,7 +162,7 @@ public final class Camps {
                 camps.add(camp);
             }
         } catch (Exception e) {
-            MobsLearn.LOG.error("[MobsLearn] Failed to read camps", e);
+            MobsLearn.LOG.error("Can't read camps", e);
         }
     }
 
@@ -185,6 +188,8 @@ public final class Camps {
                 o.addProperty("z", c.z);
                 o.addProperty("step", c.step);
                 o.addProperty("done", c.done);
+                if (c.visible) o.addProperty("visible", true);
+                if (c.rush) o.addProperty("rush", true);
                 if (c.colony != null) o.addProperty("colony", c.colony);
                 if (c.crew != null) o.addProperty("crew", c.crew);
                 o.addProperty("rot", c.rot);
@@ -207,7 +212,7 @@ public final class Camps {
             Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
             dirty = false;
         } catch (Exception e) {
-            MobsLearn.LOG.error("[MobsLearn] Failed to save camps", e);
+            MobsLearn.LOG.error("Can't save camps", e);
         }
     }
 
@@ -238,7 +243,7 @@ public final class Camps {
             try {
                 maybeStart(level, t);
             } catch (Exception e) {
-                MobsLearn.LOG.warn("[MobsLearn] camp start failed", e);
+                MobsLearn.LOG.warn("Camp start failed", e);
             }
         }
         if (t % 5 == 0) {
@@ -247,20 +252,34 @@ public final class Camps {
                 Camp c = it.next();
                 if (c.done || c.rush || !c.dim.equals(dim)) continue;
                 try {
-                    if (!griefing(level) || (c.colony == null && WorldBrain.levelAt(skillOf(c.kind), level, new BlockPos(c.x, c.y, c.z)) <= 0)) {
+                    if (!griefing(level) || !Colonies.allowsProject(c.colony)
+                        || (c.colony == null && WorldBrain.levelAt(skillOf(c.kind), level, new BlockPos(c.x, c.y, c.z)) <= 0)) {
                         release(level, c);
                         continue;
                     }
-                    int reps = Math.max(1, Math.min(16, Colonies.speed() / 25));
+                    double speed = Colonies.speed();
+                    if (c.colony != null) {
+                        if (!level.isLoaded(new BlockPos(c.x, c.y, c.z))) continue;
+                        int range = c.visible ? 96 : Colonies.DEVELOPMENT_RANGE;
+                        boolean nearby = level.getNearestPlayer(c.x, c.y, c.z, range, false) != null;
+                        if (c.visible && !nearby) {
+                            release(level, c);
+                            c.idle = t;
+                            continue;
+                        }
+                        speed = Colonies.developmentSpeed();
+                        if (!nearby) speed *= Colonies.DISTANT_DEVELOPMENT;
+                    }
+                    int reps = Math.max(1, Math.min(16, (int) (speed / 25)));
                     boolean alive = true;
-                    for (int k = 0; k < reps && alive && !c.done; k++) alive = work(level, c, t);
+                    for (int k = 0; k < reps && alive && !c.done; k++) alive = work(level, c, t, speed);
                     if (!alive) {
                         release(level, c);
                         it.remove();
                         dirty = true;
                     }
                 } catch (Exception e) {
-                    MobsLearn.LOG.warn("[MobsLearn] camp build failed", e);
+                    MobsLearn.LOG.warn("Camp build failed", e);
                     release(level, c);
                     it.remove();
                     dirty = true;
@@ -371,12 +390,16 @@ public final class Camps {
     }
 
     private static Mob findBuilder(ServerLevel level, MobGroup g, BlockPos at, double radius) {
+        return findBuilder(level, g, at, radius, null, null);
+    }
+
+    private static Mob findBuilder(ServerLevel level, MobGroup g, BlockPos at, double radius, String colony, String crew) {
         Mob best = null;
         double bestD = Double.MAX_VALUE;
         for (Mob m : level.getEntitiesOfClass(Mob.class, new AABB(at).inflate(radius))) {
-            if (MobGroup.of(m.getType()) != g || !m.isAlive()) continue;
-            if (m.getTarget() != null && g.hostile) continue;
-            if (Builders.busy(m)) continue;
+            if (!m.isAlive() || (crew == null ? MobGroup.of(m.getType()) != g : !Colonies.isBuilder(m, colony, crew))) continue;
+            if (m.getTarget() != null && (crew != null || g.hostile)) continue;
+            if (Builders.busy(m) || camps.stream().anyMatch(c -> m.getUUID().equals(c.worker))) continue;
             double d = m.distanceToSqr(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
             if (d < bestD) {
                 bestD = d;
@@ -386,7 +409,7 @@ public final class Camps {
         return best;
     }
 
-    private static boolean work(ServerLevel level, Camp c, long t) {
+    private static boolean work(ServerLevel level, Camp c, long t, double speed) {
         BlockPos origin = new BlockPos(c.x, c.y, c.z);
         if (!level.isLoaded(origin)) return true;
         if (c.plan == null) c.plan = plan(c);
@@ -406,15 +429,17 @@ public final class Camps {
             return true;
         }
         MobGroup g = groupOf(c.crew != null ? c.crew : c.kind);
+        String faction = Colonies.newKind(c.crew) ? c.crew : null;
         Op op = c.plan.get(c.step);
         BlockPos pos = posOf(level, c, origin, op);
         Mob builder = c.worker == null ? null : level.getEntity(c.worker) instanceof Mob m ? m : null;
-        if (builder != null && (!builder.isAlive() || (g.hostile && builder.getTarget() != null))) {
+        if (builder != null && (!builder.isAlive() || ((g.hostile || faction != null) && builder.getTarget() != null))) {
             release(level, c);
             builder = null;
         }
-        if (builder == null) builder = findBuilder(level, g, pos, 32);
+        if (builder == null) builder = findBuilder(level, g, pos, 32, c.colony, faction);
         if (builder == null) {
+            if (c.idle == 0) c.idle = t;
             return t - c.idle <= 72000;
         }
         if (!builder.getUUID().equals(c.worker)) {
@@ -427,7 +452,7 @@ public final class Camps {
             c.stallStep = c.step;
             c.stallSince = t;
         }
-        boolean forced = t - c.stallSince > Math.max(60, 1200 / Colonies.speed());
+        boolean forced = t - c.stallSince > Math.max(60, (long) (1200 / speed));
         double hx = builder.getX() - (pos.getX() + 0.5), hz = builder.getZ() - (pos.getZ() + 0.5);
         double horiz = Math.sqrt(hx * hx + hz * hz);
         double reach = forced || Colonies.warp() >= 50 ? 48 : g == MobGroup.VILLAGER ? 5 : 3.6;
@@ -459,7 +484,7 @@ public final class Camps {
         if (c.preparingStep != c.step) {
             c.preparingStep = c.step;
             c.preparedAt = t;
-            c.nextPlace = t + (op.state.isAir() ? 30 : 15) / Colonies.speed();
+            c.nextPlace = t + (long) ((op.state.isAir() ? 30 : 15) / speed);
             Builders.swing(builder);
             return true;
         }
@@ -479,7 +504,7 @@ public final class Camps {
         }
         c.step++;
         c.preparingStep = -1;
-        c.nextPlace = t + Math.max(1L, (long) ((g == MobGroup.VILLAGER ? 30 : 15) * (c.colony != null ? Colonies.buildFactor(level, c.colony) : 1f) / Colonies.speed()));
+        c.nextPlace = t + Math.max(1L, (long) ((g == MobGroup.VILLAGER ? 30 : 15) * (c.colony != null ? Colonies.buildFactor(level, c.colony) : 1f) / speed));
         dirty = true;
         return true;
     }
@@ -679,6 +704,22 @@ public final class Camps {
         return y;
     }
 
+    public static int groundY(ServerLevel level, int x, int z, int nearY, int range) {
+        if (!level.dimension().equals(net.minecraft.world.level.Level.NETHER)) return groundY(level, x, z);
+        int start = Math.max(5, nearY - range), end = Math.min(116, nearY + range);
+        int best = Integer.MIN_VALUE;
+        BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
+        for (int y = start; y <= end; y++) {
+            BlockState floor = level.getBlockState(at.set(x, y - 1, z));
+            if (!natural(floor) || floor.canBeReplaced() || !floor.getFluidState().isEmpty()) continue;
+            if (!level.getBlockState(at.set(x, y, z)).canBeReplaced() || !level.getFluidState(at).isEmpty()) continue;
+            if (!level.getBlockState(at.set(x, y + 1, z)).canBeReplaced() || !level.getFluidState(at).isEmpty()) continue;
+            if (!level.getBlockState(at.set(x, y + 2, z)).canBeReplaced() || !level.getFluidState(at).isEmpty()) continue;
+            if (best == Integer.MIN_VALUE || Math.abs(y - nearY) < Math.abs(best - nearY)) best = y;
+        }
+        return best;
+    }
+
     private static void doorTop(ServerLevel level, BlockPos pos, BlockState state) {
         if (!(state.getBlock() instanceof net.minecraft.world.level.block.DoorBlock)
             || state.getValue(net.minecraft.world.level.block.DoorBlock.HALF) != net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER) return;
@@ -776,6 +817,7 @@ public final class Camps {
     private static void complete(ServerLevel level, Camp c, BlockPos origin) {
         release(level, c);
         c.done = true;
+        c.visible = false;
         c.oldLvl = 0;
         c.plan = null;
         dirty = true;
@@ -870,8 +912,10 @@ public final class Camps {
         return out;
     }
 
-    private static boolean natural(BlockState s) {
+    static boolean natural(BlockState s) {
         return s.is(BlockTags.DIRT) || s.is(BlockTags.SAND) || s.is(BlockTags.BASE_STONE_OVERWORLD) || s.is(Blocks.GRAVEL)
+            || s.is(BlockTags.BASE_STONE_NETHER) || s.is(Blocks.END_STONE) || s.is(Blocks.SOUL_SOIL) || s.is(Blocks.MAGMA_BLOCK)
+            || s.is(Blocks.CRIMSON_NYLIUM) || s.is(Blocks.WARPED_NYLIUM) || s.is(Blocks.NETHER_WART_BLOCK) || s.is(Blocks.WARPED_WART_BLOCK)
             || s.is(Blocks.SNOW) || s.is(Blocks.SNOW_BLOCK) || s.is(BlockTags.LEAVES) || s.is(BlockTags.LOGS)
             || s.is(Blocks.CLAY) || s.is(BlockTags.TERRACOTTA) || s.canBeReplaced();
     }
@@ -982,6 +1026,9 @@ public final class Camps {
             case "vcamp" -> villagerCamp(p);
             case "flag" -> Landmarks.flag(p, lvl);
             case "watchtower" -> Landmarks.watchtower(p, lvl);
+            case "pillager", "witch", "nether", "enderman" -> Designs.factionBuilding(p, kind, lvl, true, style);
+            case "pillager_home", "witch_home", "nether_home", "enderman_home" ->
+                Designs.factionBuilding(p, kind.substring(0, kind.length() - 5), lvl, false, style);
             case "vwall" -> palisade(p, lvl, Blocks.OAK_FENCE.defaultBlockState(), Blocks.LANTERN.defaultBlockState(), 5);
             default -> Designs.villageCenter(p, lvl, style, r);
         }
@@ -1204,18 +1251,41 @@ public final class Camps {
 
     private static boolean anyRush;
 
-    /** Finishes a settlement's projects without builders, but spread over ticks (bounded blocks per tick) to avoid lag spikes. */
     public static void instantBuild(ServerLevel level, String colony) {
         String dim = dimId(level);
         for (Camp c : camps) {
-            if (c.done || !colony.equals(c.colony) || !c.dim.equals(dim)) continue;
+            if (c.done || c.visible || !colony.equals(c.colony) || !c.dim.equals(dim)) continue;
             c.rush = true;
             anyRush = true;
+            dirty = true;
+        }
+        rush(level);
+    }
+
+    public static void keepProjectsVisible(String colony) {
+        for (Camp c : camps) {
+            if (colony.equals(c.colony) && !c.done && !c.rush) {
+                c.visible = true;
+                dirty = true;
+            }
+        }
+    }
+
+    public static void instantBuildCore(ServerLevel level, String colony, String kind, BlockPos origin) {
+        String dim = dimId(level);
+        for (Camp c : camps) {
+            if (c.done || !colony.equals(c.colony) || !kind.equals(c.kind) || !dim.equals(c.dim)
+                || c.x != origin.getX() || c.y != origin.getY() || c.z != origin.getZ()) continue;
+            c.rush = true;
+            anyRush = true;
+            dirty = true;
+            break;
         }
         rush(level);
     }
 
     private static void rush(ServerLevel level) {
+        if (!griefing(level)) return;
         refill(level);
         String dim = dimId(level);
         boolean left = false;
@@ -1224,6 +1294,10 @@ public final class Camps {
             if (c.done || !c.dim.equals(dim)) {
                 if (!c.done) left = true;
                 else c.rush = false;
+                continue;
+            }
+            if (!Colonies.allowsProject(c.colony)) {
+                left = true;
                 continue;
             }
             BlockPos origin = new BlockPos(c.x, c.y, c.z);
@@ -1238,7 +1312,7 @@ public final class Camps {
             for (; c.step < c.plan.size() && rushBudget > 0; c.step++) {
                 Op op = c.plan.get(c.step);
                 BlockPos pos = posOf(level, c, origin, op);
-                if (!level.isLoaded(pos)) continue;
+                if (!level.isLoaded(pos)) break;
                 BlockState cur = level.getBlockState(pos);
                 if (cur.equals(op.state) || !placeable(level, c, op, pos, cur)) continue;
                 rushBudget--;
@@ -1246,6 +1320,7 @@ public final class Camps {
                     if (cur.is(BlockTags.LOGS)) fellTree(level, c, pos);
                     level.removeBlock(pos, false);
                 } else put(level, c, pos, op);
+                dirty = true;
             }
             if (c.step >= c.plan.size()) {
                 c.rush = false;
@@ -1298,6 +1373,7 @@ public final class Camps {
     public static BlockPos siteNear(ServerLevel level, BlockPos near, int radius, int spread, RandomSource r, String colony, int maxDiff) {
         BlockPos best = null;
         int bestRange = Integer.MAX_VALUE;
+        String dim = dimId(level);
         for (int attempt = 0; attempt < 28; attempt++) {
             int sp = attempt < 14 ? spread : spread * 2 + 4;
             int x = near.getX() + (attempt == 0 ? 0 : r.nextInt(sp * 2 + 1) - sp);
@@ -1305,7 +1381,7 @@ public final class Camps {
             if (!level.isLoaded(new BlockPos(x - radius, near.getY(), z - radius)) || !level.isLoaded(new BlockPos(x + radius, near.getY(), z + radius))) continue;
             boolean free = true;
             for (Camp o : camps) {
-                if (isPalisade(o.kind) || o.kind.equals("vpath")) continue;
+                if (!o.dim.equals(dim) || isPalisade(o.kind) || o.kind.equals("vpath")) continue;
                 int gap = colony != null && !colony.equals(o.colony) ? 24 : radius + 7;
                 if (Math.abs(o.x - x) <= gap && Math.abs(o.z - z) <= gap) free = false;
             }
@@ -1314,7 +1390,11 @@ public final class Camps {
             boolean ok = true;
             for (int dx = -radius; dx <= radius && ok; dx++) {
                 for (int dz = -radius; dz <= radius && ok; dz++) {
-                    int h = groundY(level, x + dx, z + dz);
+                    int h = groundY(level, x + dx, z + dz, near.getY(), 4);
+                    if (h == Integer.MIN_VALUE) {
+                        ok = false;
+                        continue;
+                    }
                     min = Math.min(min, h);
                     max = Math.max(max, h);
                     BlockState gs = level.getBlockState(new BlockPos(x + dx, h - 1, z + dz));
@@ -1326,9 +1406,10 @@ public final class Camps {
                 }
             }
             if (!ok || max - min > maxDiff) continue;
+            int cy = groundY(level, x, z, near.getY(), 4);
+            if (cy == Integer.MIN_VALUE) continue;
             if (max - min < bestRange) {
                 bestRange = max - min;
-                int cy = groundY(level, x, z);
                 best = new BlockPos(x, Math.max(min, Math.min(max, cy)), z);
                 if (bestRange <= 1) break;
             }

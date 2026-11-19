@@ -56,6 +56,10 @@ public class SettlementsScreen extends Screen {
     }
 
     public static void update(String json) {
+        if (json.startsWith("{\"nemeses\"")) {
+            NemesisScreen.update(json);
+            return;
+        }
         rows.clear();
         JsonObject root = JsonParser.parseString(json).getAsJsonObject();
         warp = num(root, "warp", 1);
@@ -149,6 +153,10 @@ public class SettlementsScreen extends Screen {
             case "village" -> r.camp ? "campfire" : "bell";
             case "skeleton" -> "skeleton_skull";
             case "creeper" -> "creeper_head";
+            case "pillager" -> "pillager_spawn_egg";
+            case "witch" -> "witch_spawn_egg";
+            case "nether" -> "magma_cream";
+            case "enderman" -> "enderman_spawn_egg";
             default -> "zombie_head";
         };
     }

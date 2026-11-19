@@ -2,6 +2,10 @@ import re, os, sys
 root = sys.argv[1]
 C = 'com.rrm.mobslearn.mob.Compat.'
 R = [
+    (r'import com\.mojang\.serialization\.JsonOps;\n(?=import com\.rrm\.mobslearn\.MobsLearn;)', ''),
+    (r'import net\.minecraft\.network\.chat\.ComponentSerialization;\n(?=import net\.minecraft\.server\.MinecraftServer;)', ''),
+    (r'ComponentSerialization\.CODEC\.parse\(JsonOps\.INSTANCE, reply\)\.result\(\)', 'Optional.ofNullable(Component.Serializer.fromJson(reply))'),
+    (r'ComponentSerialization\.CODEC\.encodeStart\(JsonOps\.INSTANCE, reply\)\.result\(\)', 'Optional.of(Component.Serializer.toJsonTree(reply))'),
     (r'net\.minecraft\.resources\.new ResourceLocation\(', 'new net.minecraft.resources.ResourceLocation('),
     (r"([\w.()]+?)\.has\(DataComponents\.FOOD\)", r"\1.isEdible()"),
     (r'Blocks\.SHORT_GRASS\b', 'Blocks.GRASS'),

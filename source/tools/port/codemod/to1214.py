@@ -1,6 +1,6 @@
 import re, os, sys, json
 root = sys.argv[1]
-idx = json.load(open('/home/claude/port/idx1214.json'))
+idx = json.load(open(os.environ.get('WORLDLEARNS_CLASS_INDEX', '/home/claude/port/idx1214.json'), encoding='utf-8'))
 
 def split_args(s, start):
     depth = 0; args = []; cur = start; i = start
@@ -48,6 +48,10 @@ SIMPLE = [
     (r'\.isBrightOutside\(\)', '.isDay()'),
     (r'\.isDarkOutside\(\)', '.isNight()'),
     (r'\.getOverworldClockTime\(\)', '.getDayTime()'),
+    (r'Items\.(BED|WOOL|CARPET|BANNER|CANDLE)\.(\w+)\(\)', lambda m: 'Items.' + re.sub('([a-z])([A-Z])', r'\1_\2', m.group(2)).upper() + '_' + m.group(1)),
+    (r'SoundEvents\.(CAT_HISS|CHICKEN_HURT)_BABY\.value\(\)', r'SoundEvents.\1'),
+    (r'SoundEvents\.SHIELD_BREAK\.value\(\)', r'SoundEvents.SHIELD_BREAK'),
+    (r'new net\.minecraft\.server\.level\.ServerBossEvent\(UUID\.randomUUID\(\), ', r'new net.minecraft.server.level.ServerBossEvent('),
     (r'Blocks\.(BED|WOOL|CARPET|STAINED_GLASS|BANNER|CANDLE_CAKE)\.(\w+)\(\)', lambda m: 'Blocks.' + re.sub('([a-z])([A-Z])', r'\1_\2', m.group(2)).upper() + '_' + m.group(1)),
     (r'\.requires\(Commands\.hasPermission\(Commands\.LEVEL_GAMEMASTERS\)\)', '.requires(src -> src.hasPermission(2))'),
     (r'PayloadTypeRegistry\.clientboundPlay\(\)', 'PayloadTypeRegistry.playS2C()'),

@@ -6,7 +6,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 
-/** Draws known settlements as a little map with coloured lines for their relations (war, friendship, alliance, peace). */
 public final class RelationsMap {
     public record Node(String id, String kind, String icon, int x, int z, int accent, boolean known) {
     }
@@ -36,7 +35,6 @@ public final class RelationsMap {
         }
     }
 
-    /** @return content height used */
     public static int draw(GuiGraphicsExtractor g, Font font, List<Node> nodes, List<Link> links, double px, double pz,
                            int x, int y, int w, int h, int mx, int my) {
         g.fill(x, y, x + w, y + h, 0x60000000);

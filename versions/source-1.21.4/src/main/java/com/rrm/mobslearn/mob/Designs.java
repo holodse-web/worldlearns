@@ -948,6 +948,63 @@ public final class Designs {
         gap(p, 0, -1, v == 2 ? 1 : 2);
     }
 
+    public static void factionBuilding(B p, String kind, int lvl, boolean core, int style) {
+        int rad = core ? 3 : 2;
+        int walls = core ? 2 + Math.min(2, lvl) : 2;
+        switch (kind) {
+            case "pillager" -> {
+                Wood oak = WOODS[3];
+                walls(p, rad, -rad, rad, 0, walls, oak.log(), oak.planks(), Blocks.COBBLESTONE.defaultBlockState());
+                floor(p, rad, -rad, rad, oak.planks());
+                gableZ(p, rad, -rad, rad, walls + 1, oak.stairs(), oak.slab(), oak.planks(), 0);
+                p.put(rad, 1, 0, Blocks.IRON_BARS.defaultBlockState());
+                p.put(-rad, 1, 0, Blocks.IRON_BARS.defaultBlockState());
+                if (core) {
+                    p.put(0, walls, -rad, Blocks.OAK_PLANKS.defaultBlockState());
+                    p.put(0, walls + 1, -rad, Blocks.BLACK_BANNER.defaultBlockState());
+                }
+            }
+            case "witch" -> {
+                Wood wood = WOODS[3 + Math.floorMod(style, 2) * 4];
+                walls(p, rad, -rad, rad, 0, walls, wood.log(), wood.planks(), Blocks.MOSSY_COBBLESTONE.defaultBlockState());
+                floor(p, rad, -rad, rad, wood.planks());
+                pyramid(p, rad, -rad, rad, walls + 1, Blocks.SPRUCE_STAIRS, Blocks.SPRUCE_SLAB.defaultBlockState());
+                p.put(rad, 1, 0, Blocks.GLASS_PANE.defaultBlockState());
+                p.put(-rad, 1, 0, Blocks.GLASS_PANE.defaultBlockState());
+                p.put(-rad + 1, 0, 1, Blocks.CAULDRON.defaultBlockState());
+                if (core) p.put(0, 0, rad - 1, Blocks.BREWING_STAND.defaultBlockState());
+            }
+            case "nether" -> {
+                BlockState blackstone = Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState();
+                BlockState crimson = Blocks.CRIMSON_PLANKS.defaultBlockState();
+                walls(p, rad, -rad, rad, 0, walls, Blocks.POLISHED_BASALT.defaultBlockState(), crimson, blackstone);
+                floor(p, rad, -rad, rad, blackstone);
+                fill(p, rad, walls + 1, () -> blackstone);
+                p.put(-rad, 1, 0, Blocks.NETHER_BRICK_FENCE.defaultBlockState());
+                p.put(rad, 1, 0, Blocks.NETHER_BRICK_FENCE.defaultBlockState());
+                p.put(-rad + 1, 0, 1, Blocks.SOUL_LANTERN.defaultBlockState());
+                if (core) p.put(0, walls + 2, 0, Blocks.GILDED_BLACKSTONE.defaultBlockState());
+            }
+            default -> {
+                BlockState stone = Blocks.END_STONE_BRICKS.defaultBlockState();
+                BlockState purpur = Blocks.PURPUR_BLOCK.defaultBlockState();
+                walls = core ? 4 + lvl : 3;
+                walls(p, rad, -rad, rad, 0, walls, Blocks.PURPUR_PILLAR.defaultBlockState(), stone, purpur);
+                floor(p, rad, -rad, rad, purpur);
+                fill(p, rad, walls + 1, () -> purpur);
+                p.put(-rad, 2, 0, Blocks.MAGENTA_STAINED_GLASS.defaultBlockState());
+                p.put(rad, 2, 0, Blocks.MAGENTA_STAINED_GLASS.defaultBlockState());
+                p.put(-rad + 1, 0, 1, Blocks.END_ROD.defaultBlockState());
+                if (core) {
+                    corners(p, rad, walls + 2, walls + 3, Blocks.PURPUR_PILLAR.defaultBlockState());
+                    for (int x : new int[]{-rad, rad}) for (int z : new int[]{-rad, rad}) p.put(x, walls + 4, z, Blocks.END_ROD.defaultBlockState());
+                }
+            }
+        }
+        gap(p, 0, -rad, kind.equals("enderman") ? 3 : 2);
+        if (core) p.put(1, 0, 1, Blocks.CHEST.defaultBlockState());
+    }
+
     public static void villageCenter(B p, int lvl, int style, RandomSource r) {
         int v = Math.floorMod(style + r.nextInt(4), 4);
         Wood w = wood(style);

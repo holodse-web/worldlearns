@@ -49,7 +49,7 @@ public final class AiChat {
             if (j.has("model")) model = j.get("model").getAsString();
             if (j.has("key")) key = j.get("key").getAsString();
         } catch (Exception e) {
-            MobsLearn.LOG.warn("[MobsLearn] Failed to read AI config", e);
+            MobsLearn.LOG.warn("Can't read AI config", e);
         }
     }
 
@@ -63,7 +63,7 @@ public final class AiChat {
             Files.createDirectories(file().getParent());
             Files.writeString(file(), j.toString(), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            MobsLearn.LOG.warn("[MobsLearn] Failed to save AI config", e);
+            MobsLearn.LOG.warn("Can't save AI config", e);
         }
     }
 

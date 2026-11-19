@@ -6,7 +6,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
-/** Draws known settlements as a little map with coloured lines for their relations (war, friendship, alliance, peace). */
 public final class RelationsMap {
     public record Node(String id, String kind, String icon, int x, int z, int accent, boolean known) {
     }
@@ -36,7 +35,6 @@ public final class RelationsMap {
         }
     }
 
-    /** @return content height used */
     public static int draw(GuiGraphics g, Font font, List<Node> nodes, List<Link> links, double px, double pz,
                            int x, int y, int w, int h, int mx, int my) {
         g.fill(x, y, x + w, y + h, 0x60000000);
@@ -68,7 +66,7 @@ public final class RelationsMap {
         }
         int ppx = ox + (int) Math.round((px - cx) * scale), ppz = oy + (int) Math.round((pz - cz) * scale);
         g.fill(ppx - 2, ppz - 2, ppx + 3, ppz + 3, 0xFFFFFFFF);
-        g.drawString(font, Component.translatable("mobslearn.map.you"), ppx + 5, ppz - 4, 0xFFFFFFFF, true);
+        com.rrm.mobslearn.client.Ui.text(g, font, Component.translatable("mobslearn.map.you"), ppx + 5, ppz - 4, 0xFFFFFFFF, true);
         Component hoverName = null;
         int hx = 0, hy = 0;
         for (Node n : nodes) {
@@ -86,7 +84,7 @@ public final class RelationsMap {
         if (hoverName != null) {
             int tw = font.width(hoverName) + 8;
             g.fill(hx - tw / 2, hy - 24, hx + tw / 2, hy - 12, 0xE0101810);
-            g.drawString(font, hoverName, hx - tw / 2 + 4, hy - 22, 0xFFFFFFFF, false);
+            com.rrm.mobslearn.client.Ui.text(g, font, hoverName, hx - tw / 2 + 4, hy - 22, 0xFFFFFFFF, false);
         }
         if (shown == 0) Ui.center(g, font, Component.translatable("mobslearn.map.empty"), x + w / 2, oy - 4, Ui.MUTED);
         String[] rels = {"war", "friend", "ally", "peace"};
@@ -94,7 +92,7 @@ public final class RelationsMap {
         for (String r : rels) {
             Component label = Component.translatable("mobslearn.map.rel." + r);
             g.fill(lx, ly + 3, lx + 10, ly + 5, color(r));
-            g.drawString(font, label, lx + 13, ly, Ui.CREAM, false);
+            com.rrm.mobslearn.client.Ui.text(g, font, label, lx + 13, ly, Ui.CREAM, false);
             lx += font.width(label) + 24;
         }
         return h;

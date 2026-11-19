@@ -128,12 +128,23 @@ public final class Net {
             context.server().execute(() -> com.rrm.mobslearn.learn.WorldBrain.configure(context.player(), payload)));
     }
 
-    public record SettingsPayload(double speed, boolean absurd, boolean combat, int difficulty, boolean enabled, int warp) implements CustomPacketPayload {
-        public static final Type<SettingsPayload> TYPE = new Type<>(MobsLearn.id("settings"));
-        public static final StreamCodec<RegistryFriendlyByteBuf, SettingsPayload> CODEC = StreamCodec.composite(
-            ByteBufCodecs.DOUBLE, SettingsPayload::speed, ByteBufCodecs.BOOL, SettingsPayload::absurd,
-            ByteBufCodecs.BOOL, SettingsPayload::combat, ByteBufCodecs.VAR_INT, SettingsPayload::difficulty,
-            ByteBufCodecs.BOOL, SettingsPayload::enabled, ByteBufCodecs.VAR_INT, SettingsPayload::warp, SettingsPayload::new);
+    public record SettingsPayload(double speed, boolean absurd, boolean combat, int difficulty, boolean enabled, int warp,
+                                  double settlementSpeed, boolean villages, int flags) implements CustomPacketPayload {
+        public static final Type<SettingsPayload> TYPE = new Type<>(MobsLearn.id("settings_v3"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, SettingsPayload> CODEC = StreamCodec.of(
+            (buf, settings) -> {
+                buf.writeDouble(settings.speed());
+                buf.writeBoolean(settings.absurd());
+                buf.writeBoolean(settings.combat());
+                buf.writeVarInt(settings.difficulty());
+                buf.writeBoolean(settings.enabled());
+                buf.writeVarInt(settings.warp());
+                buf.writeDouble(settings.settlementSpeed());
+                buf.writeBoolean(settings.villages());
+                buf.writeVarInt(settings.flags());
+            },
+            buf -> new SettingsPayload(buf.readDouble(), buf.readBoolean(), buf.readBoolean(), buf.readVarInt(),
+                buf.readBoolean(), buf.readVarInt(), buf.readDouble(), buf.readBoolean(), buf.readVarInt()));
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
     }
 }

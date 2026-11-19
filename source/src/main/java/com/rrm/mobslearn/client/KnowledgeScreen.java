@@ -117,6 +117,8 @@ public class KnowledgeScreen extends Screen {
             b -> this.minecraft.gui.setScreen(new JournalScreen(this))));
         addRenderableWidget(new MlButton(this.width - 172, 42, 80, 18, Component.translatable("mobslearn.settlements.title"),
             b -> this.minecraft.gui.setScreen(new SettlementsScreen(this))));
+        addRenderableWidget(new MlButton(this.width - 256, 42, 80, 18, Component.translatable("mobslearn.nemesis.button"),
+            b -> this.minecraft.gui.setScreen(new NemesisScreen(this))));
     }
 
     private void buildSide() {
@@ -135,10 +137,14 @@ public class KnowledgeScreen extends Screen {
             }
         }
         y += 4;
+        side.add(new Entry(null, "mobslearn.screen.cat.boss", y, HEAD_H));
+        y += HEAD_H;
+        side.add(new Entry(MobGroup.BOSS, null, y, ROW_H));
+        y += ROW_H + 4;
         side.add(new Entry(null, "mobslearn.screen.cat.peaceful", y, HEAD_H));
         y += HEAD_H;
         for (MobGroup g : MobGroup.values()) {
-            if (!g.hostile && g != MobGroup.WORLD) {
+            if (!g.hostile && g != MobGroup.WORLD && g != MobGroup.BOSS) {
                 side.add(new Entry(g, null, y, ROW_H));
                 y += ROW_H;
             }

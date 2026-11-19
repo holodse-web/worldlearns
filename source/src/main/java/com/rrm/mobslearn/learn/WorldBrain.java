@@ -2,6 +2,8 @@ package com.rrm.mobslearn.learn;
 
 import com.rrm.mobslearn.MobsLearn;
 import com.rrm.mobslearn.MobsLearnRules;
+import com.rrm.mobslearn.mob.DialogueMemory;
+import com.rrm.mobslearn.mob.Talk;
 import com.rrm.mobslearn.mob.TraitTags;
 import com.rrm.mobslearn.mob.Traits;
 import com.rrm.mobslearn.net.Net;
@@ -50,6 +52,9 @@ public final class WorldBrain {
     private static Path file() { return server.getWorldPath(LevelResource.ROOT).resolve("mobslearn.json"); }
     public static void start(MinecraftServer s) {
         server = s; ticks = 0; dirty = false; travelers.clear(); knowledge.clear(); Learning.reset();
+        Talk.reset();
+        DialogueMemory.start(s);
+        com.rrm.mobslearn.mob.Saga.start(s);
         try {
             Path f = file();
             if (Files.isRegularFile(f)) {
@@ -59,11 +64,10 @@ public final class WorldBrain {
                 if (!original.has("schema") && !Files.exists(backup)) Files.copy(f, backup);
                 knowledge.readJson(json);
             }
-        } catch (Exception e) { MobsLearn.LOG.error("[MobsLearn] Failed to read knowledge", e); }
+        } catch (Exception e) { MobsLearn.LOG.error("Can't read knowledge", e); }
         knowledge.enabled = s.getGameRules().get(MobsLearnRules.ENABLED);
-        MobsLearn.LOG.info("[MobsLearn] World intelligence: {}%, enabled: {}", knowledge.intelligence(), knowledge.enabled);
     }
-    public static void stop() { save(); server = null; travelers.clear(); Learning.reset(); }
+    public static void stop() { save(); com.rrm.mobslearn.mob.Saga.stop(); DialogueMemory.stop(); Talk.reset(); server = null; travelers.clear(); Learning.reset(); }
     public static void save() {
         if (server == null) return;
         try {
@@ -72,12 +76,13 @@ public final class WorldBrain {
             try { Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
             catch (AtomicMoveNotSupportedException e) { Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING); }
             dirty = false;
-        } catch (Exception e) { MobsLearn.LOG.error("[MobsLearn] Failed to save knowledge", e); }
+        } catch (Exception e) { MobsLearn.LOG.error("Can't save knowledge", e); }
     }
 
     public static void teach(Trigger trigger, MobGroup source, double amount) { teach(trigger, source, amount, null, null); }
     public static void teach(Trigger trigger, MobGroup source, double amount, ServerLevel level, BlockPos pos) {
         if (server == null || !knowledge.enabled || source == null || amount <= 0 || !Double.isFinite(amount)) return;
+        if (level != null && pos != null) amount *= com.rrm.mobslearn.mob.Saga.learningFactor(level, pos);
         int intelBefore = knowledge.intelligence();
         Map<Skill, Integer> before = new HashMap<>();
         boolean witness = false;
@@ -116,6 +121,7 @@ public final class WorldBrain {
         knowledge.points.clear(); knowledge.regions.clear(); knowledge.journal.clear(); travelers.clear();
         save(); syncAll();
     }
+    public static void touch() { dirty = true; }
     public static void setSpeed(double speed) {
         if (!Double.isFinite(speed)) return;
         knowledge.speed = Math.max(0.1, Math.min(100000, speed)); save(); syncAll();
@@ -129,6 +135,9 @@ public final class WorldBrain {
         knowledge.speed = Math.max(0.1, Math.min(100000, settings.speed()));
         knowledge.absurd = settings.absurd(); knowledge.combat = settings.combat();
         knowledge.difficulty = Math.max(0, Math.min(2, settings.difficulty())); knowledge.enabled = settings.enabled();
+        knowledge.setSettlementSpeed(settings.settlementSpeed());
+        knowledge.villages = settings.villages();
+        knowledge.setFlags(settings.flags());
         com.rrm.mobslearn.mob.Colonies.setWarp(settings.warp());
         server.getGameRules().set(MobsLearnRules.ENABLED, knowledge.enabled, server);
         com.rrm.mobslearn.mob.Behaviors.reset();
@@ -148,21 +157,18 @@ public final class WorldBrain {
         long day = server.overworld() == null ? 1 : server.overworld().getOverworldClockTime() / 24000L + 1;
         knowledge.record(day, skill, level);
         dirty = true;
-        MobsLearn.LOG.info("[MobsLearn] {} learned {} level {}", skill.group(), skill.id(), level);
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             Milestones.award(player, "first_lesson");
             if (ServerPlayNetworking.canSend(player, Net.LearnPayload.TYPE)) ServerPlayNetworking.send(player, new Net.LearnPayload(skill.id(), level));
         }
         save(); syncAll();
     }
-    /** Adds a line to the world chronicle (shown in the journal). Args starting with "t:" are translation keys. */
     public static void chronicle(String key, String icon, String... args) {
         if (server == null) return;
         long day = server.overworld() == null ? 1 : server.overworld().getOverworldClockTime() / 24000L + 1;
         if (knowledge.chronicle(day, key, java.util.Arrays.asList(args), icon)) dirty = true;
     }
 
-    /** Records an already-built translatable message (e.g. a settlement announcement) in the chronicle. */
     public static void chronicle(net.minecraft.network.chat.Component msg, String icon) {
         if (!(msg.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents tc)) return;
         java.util.List<String> args = new java.util.ArrayList<>();
@@ -225,5 +231,7 @@ public final class WorldBrain {
             for (ServerPlayer player : server.getPlayerList().getPlayers()) Milestones.checkWorld(player);
         }
         if (ticks % 400 == 0 && dirty) { save(); syncAll(); }
+        if (ticks % 400 == 0) DialogueMemory.save();
+        if (knowledge.enabled) com.rrm.mobslearn.mob.Saga.serverTick(server);
     }
 }
